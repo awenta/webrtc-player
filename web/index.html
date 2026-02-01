@@ -163,26 +163,6 @@
       }
     };
 
-    pc.onicecandidate = function(evt) {
-      if (evt.candidate) {
-        send({
-          janus: "trickle",
-          session_id: sessionId,
-          handle_id: handleId,
-          transaction: tx(),
-          candidate: evt.candidate
-        });
-      } else {
-        send({
-          janus: "trickle",
-          session_id: sessionId,
-          handle_id: handleId,
-          transaction: tx(),
-          candidate: { completed: true }
-        });
-      }
-    };
-
     pc.oniceconnectionstatechange = function() {
       log("ICE state:", pc.iceConnectionState);
       if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
@@ -196,13 +176,26 @@
     var answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
+    // Wait for ICE gathering to complete so all candidates are in the SDP.
+    // This avoids sending mDNS candidates that Janus can't resolve.
+    await new Promise(function(resolve) {
+      if (pc.iceGatheringState === "complete") {
+        resolve();
+      } else {
+        pc.onicegatheringstatechange = function() {
+          if (pc.iceGatheringState === "complete") resolve();
+        };
+      }
+    });
+
+    log("ICE gathering complete, sending answer with candidates");
     send({
       janus: "message",
       session_id: sessionId,
       handle_id: handleId,
       transaction: tx(),
       body: { request: "start" },
-      jsep: { type: answer.type, sdp: answer.sdp }
+      jsep: { type: pc.localDescription.type, sdp: pc.localDescription.sdp }
     });
   }
 

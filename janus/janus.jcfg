@@ -21,7 +21,7 @@ nat: {
 	nice_debug = false
 	ice_lite = true
 	ice_tcp = false
-	full_trickle = true
+	full_trickle = false
 	# Set to your public IP if behind NAT
 	# nat_1_1_mapping = "1.2.3.4"
 }

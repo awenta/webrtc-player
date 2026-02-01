@@ -10,6 +10,9 @@ services:
       - STREAM_ID=${STREAM_ID:-1}
       - VIDEO_PORT=${VIDEO_PORT:-5004}
       - AUDIO_PORT=${AUDIO_PORT:-5005}
-    # For WebRTC connectivity behind NAT, you may need:
+      # Set to the IP the browser uses to reach this host.
+      # Auto-detected if not set, but set explicitly for remote/cloud deployments.
+      - PUBLIC_IP=${PUBLIC_IP:-}
+    # Alternative: use host networking to avoid NAT issues entirely
     # network_mode: host
     restart: unless-stopped

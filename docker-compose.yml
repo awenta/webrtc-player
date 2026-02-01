@@ -5,10 +5,8 @@ services:
       - "8088:8088"
       - "20000-20100:20000-20100/udp"
     environment:
-      # Set STREAM_URL to auto-relay a source via FFmpeg
-      # Supports RTSP, SRT, or any FFmpeg-compatible URL
-      - STREAM_URL=${STREAM_URL:-}
-      - STREAM_ID=${STREAM_ID:-1}
+      # Optional: override the default room (1)
+      - ROOM_ID=${ROOM_ID:-}
     # For WebRTC connectivity behind NAT, you may need:
     # network_mode: host
     restart: unless-stopped

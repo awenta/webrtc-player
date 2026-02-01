@@ -1,0 +1,16 @@
+general: {
+	admin_key = "janusadmin"
+}
+
+# Default room — the source app publishes here, browsers subscribe
+room-1: {
+	room = 1
+	description = "Default Stream"
+	publishers = 1
+	bitrate = 4000000
+	fir_freq = 10
+	videocodec = "h264"
+	audiocodec = "opus"
+	record = false
+	notify_joining = true
+}

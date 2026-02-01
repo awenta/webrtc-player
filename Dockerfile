@@ -5,7 +5,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Install dependencies
 RUN apt-get update && apt-get install -y \
     nginx \
-    ffmpeg \
     libmicrohttpd-dev libjansson-dev libssl-dev \
     libsofia-sip-ua-dev libglib2.0-dev libopus-dev \
     libogg-dev libcurl4-openssl-dev liblua5.3-dev \
@@ -27,7 +26,8 @@ RUN cd /tmp && \
       --disable-nanomsg \
       --disable-unix-sockets \
       --disable-data-channels \
-      --enable-plugin-streaming \
+      --enable-plugin-videoroom \
+      --disable-plugin-streaming \
       --disable-plugin-echotest \
       --disable-plugin-recordplay \
       --disable-plugin-sip \
@@ -36,14 +36,14 @@ RUN cd /tmp && \
       --disable-plugin-voicemail \
       --disable-plugin-textroom \
       --disable-plugin-audiobridge \
-      --disable-plugin-videoroom \
     && make -j$(nproc) && make install && make configs && \
     rm -rf /tmp/janus-gateway
 
 # Copy Janus config
 COPY janus/janus.jcfg /etc/janus/janus.jcfg
-COPY janus/janus.plugin.streaming.jcfg /etc/janus/janus.plugin.streaming.jcfg
+COPY janus/janus.plugin.videoroom.jcfg /etc/janus/janus.plugin.videoroom.jcfg
 COPY janus/janus.transport.websockets.jcfg /etc/janus/janus.transport.websockets.jcfg
+COPY janus/janus.transport.http.jcfg /etc/janus/janus.transport.http.jcfg
 
 # Copy web frontend
 COPY web/ /var/www/html/
@@ -58,7 +58,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # HTTP
 EXPOSE 8088
-# Janus RTP range for incoming streams
+# Janus WebRTC UDP range
 EXPOSE 20000-20100/udp
 
 ENTRYPOINT ["/entrypoint.sh"]

@@ -24,20 +24,24 @@
 <body>
 
 <video id="player" autoplay playsinline muted></video>
-<div id="overlay">Connecting…</div>
+<div id="overlay">Waiting for stream…</div>
 
 <script>
 (function() {
-  const params = new URLSearchParams(window.location.search);
-  const streamId = parseInt(params.get("stream") || "1", 10);
-  const wsUrl = params.get("ws") || ((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  var params = new URLSearchParams(window.location.search);
+  var roomId = parseInt(params.get("room") || "1", 10);
+  var wsUrl = params.get("ws") || ((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
 
-  const video = document.getElementById("player");
-  const overlay = document.getElementById("overlay");
+  var video = document.getElementById("player");
+  var overlay = document.getElementById("overlay");
 
-  let ws, pc, keepAlive;
+  var ws, sessionId, handleId, privateId, subscriberHandle, pc, keepAlive;
 
-  function log(...args) { console.log("[player]", ...args); }
+  function log() {
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift("[player]");
+    console.log.apply(console, args);
+  }
 
   function showStatus(msg) {
     overlay.textContent = msg;
@@ -48,22 +52,29 @@
     overlay.classList.add("hidden");
   }
 
-  function send(msg) {
-    const payload = JSON.stringify(msg);
-    log("→", payload);
-    ws.send(payload);
-  }
-
-  function createSession() {
-    send({ janus: "create", transaction: tx() });
-  }
-
   function tx() {
     return Math.random().toString(36).substring(2, 10);
   }
 
+  function send(msg) {
+    log("→", JSON.stringify(msg));
+    ws.send(JSON.stringify(msg));
+  }
+
+  // Transaction callbacks
+  var transactions = {};
+
+  function sendWithCb(msg, cb) {
+    var t = tx();
+    msg.transaction = t;
+    transactions[t] = cb;
+    send(msg);
+  }
+
   function connect() {
     showStatus("Connecting…");
+    cleanup();
+
     ws = new WebSocket(wsUrl, "janus-protocol");
 
     ws.onopen = function() {
@@ -73,7 +84,6 @@
 
     ws.onclose = function() {
       log("WebSocket closed, reconnecting in 3s…");
-      cleanup();
       showStatus("Disconnected. Reconnecting…");
       setTimeout(connect, 3000);
     };
@@ -82,69 +92,163 @@
       log("WebSocket error", e);
     };
 
-    let sessionId = null;
-    let handleId = null;
-
     ws.onmessage = function(evt) {
-      const msg = JSON.parse(evt.data);
+      var msg = JSON.parse(evt.data);
       log("←", JSON.stringify(msg));
 
-      if (msg.janus === "success" && !sessionId) {
-        sessionId = msg.data.id;
-        log("Session:", sessionId);
-        // Attach to streaming plugin
-        send({
-          janus: "attach",
-          plugin: "janus.plugin.streaming",
-          session_id: sessionId,
-          transaction: tx()
-        });
-        // Keep-alive
-        keepAlive = setInterval(function() {
-          if (ws.readyState === 1) {
-            send({ janus: "keepalive", session_id: sessionId, transaction: tx() });
-          }
-        }, 25000);
+      // Handle transaction callbacks
+      if (msg.transaction && transactions[msg.transaction]) {
+        transactions[msg.transaction](msg);
+        delete transactions[msg.transaction];
         return;
       }
 
-      if (msg.janus === "success" && sessionId && !handleId && msg.data && msg.data.id) {
-        handleId = msg.data.id;
-        log("Handle:", handleId);
-        // Request to watch stream
-        send({
-          janus: "message",
-          session_id: sessionId,
-          handle_id: handleId,
-          transaction: tx(),
-          body: { request: "watch", id: streamId }
-        });
+      // Handle events on the subscriber handle
+      if (msg.sender === subscriberHandle) {
+        handleSubscriberEvent(msg);
         return;
       }
 
-      if (msg.janus === "event" && msg.jsep) {
-        handleOffer(sessionId, handleId, msg.jsep);
+      // Handle events on the publisher handle (we join as listener, watch for publishers)
+      if (msg.sender === handleId) {
+        handlePublisherEvent(msg);
         return;
-      }
-
-      if (msg.janus === "hangup" || msg.janus === "detached") {
-        log("Stream ended, retrying in 3s…");
-        showStatus("Stream ended. Reconnecting…");
-        cleanup();
-        setTimeout(connect, 3000);
-        return;
-      }
-
-      if (msg.janus === "error") {
-        const errMsg = msg.error ? msg.error.reason : "Unknown error";
-        log("Error:", errMsg);
-        showStatus("Error: " + errMsg);
       }
     };
   }
 
-  async function handleOffer(sessionId, handleId, jsep) {
+  function createSession() {
+    sendWithCb({ janus: "create" }, function(msg) {
+      if (msg.janus !== "success") {
+        showStatus("Error creating session");
+        return;
+      }
+      sessionId = msg.data.id;
+      log("Session:", sessionId);
+
+      // Keep-alive
+      keepAlive = setInterval(function() {
+        if (ws && ws.readyState === 1) {
+          send({ janus: "keepalive", session_id: sessionId, transaction: tx() });
+        }
+      }, 25000);
+
+      attachPublisherHandle();
+    });
+  }
+
+  function attachPublisherHandle() {
+    sendWithCb({
+      janus: "attach",
+      plugin: "janus.plugin.videoroom",
+      session_id: sessionId
+    }, function(msg) {
+      if (msg.janus !== "success") {
+        showStatus("Error attaching plugin");
+        return;
+      }
+      handleId = msg.data.id;
+      log("Publisher handle:", handleId);
+      joinAsSubscriberListener();
+    });
+  }
+
+  function joinAsSubscriberListener() {
+    showStatus("Waiting for stream…");
+    sendWithCb({
+      janus: "message",
+      session_id: sessionId,
+      handle_id: handleId,
+      body: { request: "join", ptype: "publisher", room: roomId }
+    }, function(msg) {
+      if (msg.janus === "event" && msg.plugindata) {
+        var data = msg.plugindata.data;
+        if (data.videoroom === "joined") {
+          privateId = data.private_id;
+          log("Joined room, private_id:", privateId);
+          // Check if there are already publishers
+          if (data.publishers && data.publishers.length > 0) {
+            subscribeToFeed(data.publishers[0].id);
+          } else {
+            showStatus("Waiting for publisher…");
+          }
+        }
+      }
+    });
+  }
+
+  function handlePublisherEvent(msg) {
+    if (msg.janus !== "event" || !msg.plugindata) return;
+    var data = msg.plugindata.data;
+
+    // New publisher arrived
+    if (data.videoroom === "event" && data.publishers && data.publishers.length > 0) {
+      log("Publisher joined:", data.publishers[0].id);
+      if (!subscriberHandle) {
+        subscribeToFeed(data.publishers[0].id);
+      }
+    }
+
+    // Publisher left
+    if (data.videoroom === "event" && data.unpublished) {
+      log("Publisher left:", data.unpublished);
+      if (subscriberHandle) {
+        showStatus("Publisher disconnected. Waiting…");
+        // Detach subscriber, wait for new publisher
+        send({
+          janus: "detach",
+          session_id: sessionId,
+          handle_id: subscriberHandle,
+          transaction: tx()
+        });
+        subscriberHandle = null;
+        if (pc) { pc.close(); pc = null; }
+        video.srcObject = null;
+      }
+    }
+  }
+
+  function subscribeToFeed(feedId) {
+    log("Subscribing to feed:", feedId);
     showStatus("Starting playback…");
+
+    sendWithCb({
+      janus: "attach",
+      plugin: "janus.plugin.videoroom",
+      session_id: sessionId
+    }, function(msg) {
+      if (msg.janus !== "success") return;
+      subscriberHandle = msg.data.id;
+      log("Subscriber handle:", subscriberHandle);
+
+      sendWithCb({
+        janus: "message",
+        session_id: sessionId,
+        handle_id: subscriberHandle,
+        body: {
+          request: "join",
+          ptype: "subscriber",
+          room: roomId,
+          feed: feedId,
+          private_id: privateId
+        }
+      }, function(msg) {
+        if (msg.jsep) {
+          handleOffer(msg.jsep);
+        }
+      });
+    });
+  }
+
+  function handleSubscriberEvent(msg) {
+    if (msg.jsep) {
+      handleOffer(msg.jsep);
+    }
+  }
+
+  async function handleOffer(jsep) {
+    if (pc) { pc.close(); }
+
     pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
@@ -170,7 +274,7 @@
         send({
           janus: "trickle",
           session_id: sessionId,
-          handle_id: handleId,
+          handle_id: subscriberHandle,
           transaction: tx(),
           candidate: evt.candidate
         });
@@ -178,7 +282,7 @@
         send({
           janus: "trickle",
           session_id: sessionId,
-          handle_id: handleId,
+          handle_id: subscriberHandle,
           transaction: tx(),
           candidate: { completed: true }
         });
@@ -187,24 +291,25 @@
 
     pc.oniceconnectionstatechange = function() {
       log("ICE state:", pc.iceConnectionState);
-      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
-        showStatus("Connection lost. Reconnecting…");
+      if (pc.iceConnectionState === "failed") {
+        showStatus("Connection failed. Reconnecting…");
         cleanup();
         setTimeout(connect, 3000);
       }
     };
 
     await pc.setRemoteDescription(new RTCSessionDescription(jsep));
-    const answer = await pc.createAnswer();
+    var answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    send({
+    sendWithCb({
       janus: "message",
       session_id: sessionId,
-      handle_id: handleId,
-      transaction: tx(),
+      handle_id: subscriberHandle,
       body: { request: "start" },
       jsep: { type: answer.type, sdp: answer.sdp }
+    }, function(msg) {
+      log("Playback started");
     });
   }
 
@@ -213,6 +318,11 @@
     if (pc) { pc.close(); pc = null; }
     if (ws && ws.readyState < 2) { ws.onclose = null; ws.close(); }
     ws = null;
+    sessionId = null;
+    handleId = null;
+    subscriberHandle = null;
+    privateId = null;
+    transactions = {};
   }
 
   connect();

@@ -26,8 +26,8 @@ RUN cd /tmp && \
       --disable-nanomsg \
       --disable-unix-sockets \
       --disable-data-channels \
-      --enable-plugin-videoroom \
-      --disable-plugin-streaming \
+      --enable-plugin-streaming \
+      --disable-plugin-videoroom \
       --disable-plugin-echotest \
       --disable-plugin-recordplay \
       --disable-plugin-sip \
@@ -41,9 +41,8 @@ RUN cd /tmp && \
 
 # Copy Janus config
 COPY janus/janus.jcfg /etc/janus/janus.jcfg
-COPY janus/janus.plugin.videoroom.jcfg /etc/janus/janus.plugin.videoroom.jcfg
+COPY janus/janus.plugin.streaming.jcfg /etc/janus/janus.plugin.streaming.jcfg
 COPY janus/janus.transport.websockets.jcfg /etc/janus/janus.transport.websockets.jcfg
-COPY janus/janus.transport.http.jcfg /etc/janus/janus.transport.http.jcfg
 
 # Copy web frontend
 COPY web/ /var/www/html/
@@ -58,6 +57,9 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # HTTP
 EXPOSE 8088
+# RTP ingest ports
+EXPOSE 5004/udp
+EXPOSE 5005/udp
 # Janus WebRTC UDP range
 EXPOSE 20000-20100/udp
 

@@ -1,31 +1,28 @@
 #!/bin/bash
 set -e
 
-# Create a VideoRoom dynamically if ROOM_ID is set
-if [ -n "$ROOM_ID" ]; then
-  ROOM_DESC="${ROOM_DESC:-Live Stream $ROOM_ID}"
-  ROOM_PUBLISHERS="${ROOM_PUBLISHERS:-1}"
-  ROOM_BITRATE="${ROOM_BITRATE:-4000000}"
+# Allow overriding stream config via environment variables
+STREAM_ID="${STREAM_ID:-1}"
+VIDEO_PORT="${VIDEO_PORT:-5004}"
+AUDIO_PORT="${AUDIO_PORT:-5005}"
 
-  echo "[entrypoint] Creating VideoRoom id=$ROOM_ID desc=\"$ROOM_DESC\""
-
-  cat > /etc/janus/janus.plugin.videoroom.jcfg <<EOF
-general: {
-    admin_key = "janusadmin"
-}
-
-room-${ROOM_ID}: {
-    room = ${ROOM_ID}
-    description = "${ROOM_DESC}"
-    publishers = ${ROOM_PUBLISHERS}
-    bitrate = ${ROOM_BITRATE}
-    fir_freq = 10
-    videocodec = "h264"
-    audiocodec = "opus"
-    record = false
-    notify_joining = true
+cat > /etc/janus/janus.plugin.streaming.jcfg <<EOF
+stream-${STREAM_ID}: {
+    type = "rtp"
+    id = ${STREAM_ID}
+    description = "Live Stream ${STREAM_ID}"
+    audio = true
+    video = true
+    videoport = ${VIDEO_PORT}
+    videopt = 96
+    videortpmap = "H264/90000"
+    videofmtp = "profile-level-id=42e01f;packetization-mode=1"
+    audioport = ${AUDIO_PORT}
+    audiopt = 111
+    audiortpmap = "opus/48000/2"
 }
 EOF
-fi
+
+echo "[entrypoint] Janus Streaming: id=$STREAM_ID video=rtp://0.0.0.0:$VIDEO_PORT audio=rtp://0.0.0.0:$AUDIO_PORT"
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

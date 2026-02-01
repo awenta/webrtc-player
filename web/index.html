@@ -24,18 +24,18 @@
 <body>
 
 <video id="player" autoplay playsinline muted></video>
-<div id="overlay">Waiting for stream…</div>
+<div id="overlay">Connecting…</div>
 
 <script>
 (function() {
   var params = new URLSearchParams(window.location.search);
-  var roomId = parseInt(params.get("room") || "1", 10);
+  var streamId = parseInt(params.get("stream") || "1", 10);
   var wsUrl = params.get("ws") || ((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
 
   var video = document.getElementById("player");
   var overlay = document.getElementById("overlay");
 
-  var ws, sessionId, handleId, privateId, subscriberHandle, pc, keepAlive;
+  var ws, pc, keepAlive;
 
   function log() {
     var args = Array.prototype.slice.call(arguments);
@@ -52,23 +52,14 @@
     overlay.classList.add("hidden");
   }
 
+  function send(msg) {
+    var payload = JSON.stringify(msg);
+    log("→", payload);
+    ws.send(payload);
+  }
+
   function tx() {
     return Math.random().toString(36).substring(2, 10);
-  }
-
-  function send(msg) {
-    log("→", JSON.stringify(msg));
-    ws.send(JSON.stringify(msg));
-  }
-
-  // Transaction callbacks
-  var transactions = {};
-
-  function sendWithCb(msg, cb) {
-    var t = tx();
-    msg.transaction = t;
-    transactions[t] = cb;
-    send(msg);
   }
 
   function connect() {
@@ -79,7 +70,7 @@
 
     ws.onopen = function() {
       log("WebSocket connected");
-      createSession();
+      send({ janus: "create", transaction: tx() });
     };
 
     ws.onclose = function() {
@@ -92,163 +83,66 @@
       log("WebSocket error", e);
     };
 
+    var sessionId = null;
+    var handleId = null;
+
     ws.onmessage = function(evt) {
       var msg = JSON.parse(evt.data);
       log("←", JSON.stringify(msg));
 
-      // Handle transaction callbacks
-      if (msg.transaction && transactions[msg.transaction]) {
-        transactions[msg.transaction](msg);
-        delete transactions[msg.transaction];
+      if (msg.janus === "success" && !sessionId) {
+        sessionId = msg.data.id;
+        log("Session:", sessionId);
+        send({
+          janus: "attach",
+          plugin: "janus.plugin.streaming",
+          session_id: sessionId,
+          transaction: tx()
+        });
+        keepAlive = setInterval(function() {
+          if (ws.readyState === 1) {
+            send({ janus: "keepalive", session_id: sessionId, transaction: tx() });
+          }
+        }, 25000);
         return;
       }
 
-      // Handle events on the subscriber handle
-      if (msg.sender === subscriberHandle) {
-        handleSubscriberEvent(msg);
+      if (msg.janus === "success" && sessionId && !handleId && msg.data && msg.data.id) {
+        handleId = msg.data.id;
+        log("Handle:", handleId);
+        send({
+          janus: "message",
+          session_id: sessionId,
+          handle_id: handleId,
+          transaction: tx(),
+          body: { request: "watch", id: streamId }
+        });
         return;
       }
 
-      // Handle events on the publisher handle (we join as listener, watch for publishers)
-      if (msg.sender === handleId) {
-        handlePublisherEvent(msg);
+      if (msg.janus === "event" && msg.jsep) {
+        handleOffer(sessionId, handleId, msg.jsep);
         return;
+      }
+
+      if (msg.janus === "hangup" || msg.janus === "detached") {
+        log("Stream ended, retrying in 3s…");
+        showStatus("Stream ended. Reconnecting…");
+        cleanup();
+        setTimeout(connect, 3000);
+        return;
+      }
+
+      if (msg.janus === "error") {
+        var errMsg = msg.error ? msg.error.reason : "Unknown error";
+        log("Error:", errMsg);
+        showStatus("Error: " + errMsg);
       }
     };
   }
 
-  function createSession() {
-    sendWithCb({ janus: "create" }, function(msg) {
-      if (msg.janus !== "success") {
-        showStatus("Error creating session");
-        return;
-      }
-      sessionId = msg.data.id;
-      log("Session:", sessionId);
-
-      // Keep-alive
-      keepAlive = setInterval(function() {
-        if (ws && ws.readyState === 1) {
-          send({ janus: "keepalive", session_id: sessionId, transaction: tx() });
-        }
-      }, 25000);
-
-      attachPublisherHandle();
-    });
-  }
-
-  function attachPublisherHandle() {
-    sendWithCb({
-      janus: "attach",
-      plugin: "janus.plugin.videoroom",
-      session_id: sessionId
-    }, function(msg) {
-      if (msg.janus !== "success") {
-        showStatus("Error attaching plugin");
-        return;
-      }
-      handleId = msg.data.id;
-      log("Publisher handle:", handleId);
-      joinAsSubscriberListener();
-    });
-  }
-
-  function joinAsSubscriberListener() {
-    showStatus("Waiting for stream…");
-    sendWithCb({
-      janus: "message",
-      session_id: sessionId,
-      handle_id: handleId,
-      body: { request: "join", ptype: "publisher", room: roomId }
-    }, function(msg) {
-      if (msg.janus === "event" && msg.plugindata) {
-        var data = msg.plugindata.data;
-        if (data.videoroom === "joined") {
-          privateId = data.private_id;
-          log("Joined room, private_id:", privateId);
-          // Check if there are already publishers
-          if (data.publishers && data.publishers.length > 0) {
-            subscribeToFeed(data.publishers[0].id);
-          } else {
-            showStatus("Waiting for publisher…");
-          }
-        }
-      }
-    });
-  }
-
-  function handlePublisherEvent(msg) {
-    if (msg.janus !== "event" || !msg.plugindata) return;
-    var data = msg.plugindata.data;
-
-    // New publisher arrived
-    if (data.videoroom === "event" && data.publishers && data.publishers.length > 0) {
-      log("Publisher joined:", data.publishers[0].id);
-      if (!subscriberHandle) {
-        subscribeToFeed(data.publishers[0].id);
-      }
-    }
-
-    // Publisher left
-    if (data.videoroom === "event" && data.unpublished) {
-      log("Publisher left:", data.unpublished);
-      if (subscriberHandle) {
-        showStatus("Publisher disconnected. Waiting…");
-        // Detach subscriber, wait for new publisher
-        send({
-          janus: "detach",
-          session_id: sessionId,
-          handle_id: subscriberHandle,
-          transaction: tx()
-        });
-        subscriberHandle = null;
-        if (pc) { pc.close(); pc = null; }
-        video.srcObject = null;
-      }
-    }
-  }
-
-  function subscribeToFeed(feedId) {
-    log("Subscribing to feed:", feedId);
+  async function handleOffer(sessionId, handleId, jsep) {
     showStatus("Starting playback…");
-
-    sendWithCb({
-      janus: "attach",
-      plugin: "janus.plugin.videoroom",
-      session_id: sessionId
-    }, function(msg) {
-      if (msg.janus !== "success") return;
-      subscriberHandle = msg.data.id;
-      log("Subscriber handle:", subscriberHandle);
-
-      sendWithCb({
-        janus: "message",
-        session_id: sessionId,
-        handle_id: subscriberHandle,
-        body: {
-          request: "join",
-          ptype: "subscriber",
-          room: roomId,
-          feed: feedId,
-          private_id: privateId
-        }
-      }, function(msg) {
-        if (msg.jsep) {
-          handleOffer(msg.jsep);
-        }
-      });
-    });
-  }
-
-  function handleSubscriberEvent(msg) {
-    if (msg.jsep) {
-      handleOffer(msg.jsep);
-    }
-  }
-
-  async function handleOffer(jsep) {
-    if (pc) { pc.close(); }
-
     pc = new RTCPeerConnection({
       iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
     });
@@ -274,7 +168,7 @@
         send({
           janus: "trickle",
           session_id: sessionId,
-          handle_id: subscriberHandle,
+          handle_id: handleId,
           transaction: tx(),
           candidate: evt.candidate
         });
@@ -282,7 +176,7 @@
         send({
           janus: "trickle",
           session_id: sessionId,
-          handle_id: subscriberHandle,
+          handle_id: handleId,
           transaction: tx(),
           candidate: { completed: true }
         });
@@ -291,8 +185,8 @@
 
     pc.oniceconnectionstatechange = function() {
       log("ICE state:", pc.iceConnectionState);
-      if (pc.iceConnectionState === "failed") {
-        showStatus("Connection failed. Reconnecting…");
+      if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+        showStatus("Connection lost. Reconnecting…");
         cleanup();
         setTimeout(connect, 3000);
       }
@@ -302,14 +196,13 @@
     var answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    sendWithCb({
+    send({
       janus: "message",
       session_id: sessionId,
-      handle_id: subscriberHandle,
+      handle_id: handleId,
+      transaction: tx(),
       body: { request: "start" },
       jsep: { type: answer.type, sdp: answer.sdp }
-    }, function(msg) {
-      log("Playback started");
     });
   }
 
@@ -318,11 +211,6 @@
     if (pc) { pc.close(); pc = null; }
     if (ws && ws.readyState < 2) { ws.onclose = null; ws.close(); }
     ws = null;
-    sessionId = null;
-    handleId = null;
-    subscriberHandle = null;
-    privateId = null;
-    transactions = {};
   }
 
   connect();

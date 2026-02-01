@@ -3,10 +3,13 @@ services:
     build: .
     ports:
       - "8088:8088"
+      - "5004:5004/udp"
+      - "5005:5005/udp"
       - "20000-20100:20000-20100/udp"
     environment:
-      # Optional: override the default room (1)
-      - ROOM_ID=${ROOM_ID:-}
+      - STREAM_ID=${STREAM_ID:-1}
+      - VIDEO_PORT=${VIDEO_PORT:-5004}
+      - AUDIO_PORT=${AUDIO_PORT:-5005}
     # For WebRTC connectivity behind NAT, you may need:
     # network_mode: host
     restart: unless-stopped

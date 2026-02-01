@@ -2,7 +2,7 @@ services:
   webrtc-player:
     build: .
     ports:
-      - "8080:8080"
+      - "8088:8088"
       - "20000-20100:20000-20100/udp"
     environment:
       # Set STREAM_URL to auto-relay a source via FFmpeg

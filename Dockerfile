@@ -57,7 +57,7 @@ RUN chmod +x /entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # HTTP
-EXPOSE 8080
+EXPOSE 8088
 # Janus RTP range for incoming streams
 EXPOSE 20000-20100/udp
 

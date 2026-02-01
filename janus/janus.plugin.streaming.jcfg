@@ -1,0 +1,19 @@
+# Stream definitions can be added here statically,
+# or created dynamically via the Janus Streaming plugin API.
+#
+# Example static stream (uncomment to use):
+#
+# stream-1: {
+#     type = "rtp"
+#     id = 1
+#     description = "RTSP/SRT relayed stream"
+#     audio = true
+#     video = true
+#     videoport = 5004
+#     videopt = 96
+#     videortpmap = "H264/90000"
+#     videofmtp = "profile-level-id=42e01f;packetization-mode=1"
+#     audioport = 5005
+#     audiopt = 111
+#     audiortpmap = "opus/48000/2"
+# }

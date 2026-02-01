@@ -1,0 +1,11 @@
+general: {
+	ws = true
+	ws_port = 8188
+	ws_ip = "127.0.0.1"
+	wss = false
+	ws_logging = 0
+}
+
+admin: {
+	admin_ws = false
+}

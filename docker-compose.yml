@@ -56,9 +56,8 @@ services:
     # secrets:
     #   - srt_passphrase
 
-    # Host networking avoids Docker NAT for WebRTC. When enabled, remove
-    # the ports block above and set PUBLIC_IP to an address browsers reach.
-    # network_mode: host
+    # Use compose.deploy.yml on Linux when services must bind independently
+    # to real host management, ingest, and WebRTC interfaces.
 
 # secrets:
 #   srt_passphrase:

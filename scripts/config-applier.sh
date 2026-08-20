@@ -42,6 +42,11 @@ while true; do
     fi
     if [[ "${channel}" == 0 ]]; then
         echo "[config] applying global generation ${generation}"
+        "${S6_SVC}" -d /run/service/janus
+        for service_channel in 1 2 3 4 5; do
+            "${S6_SVC}" -d "/run/service/input-selector-${service_channel}"
+            "${S6_SVC}" -d "/run/service/srt-relay-${service_channel}"
+        done
     else
         echo "[config] applying generation ${generation} to channel ${channel}"
         selector_service="input-selector-${channel}"
@@ -52,11 +57,14 @@ while true; do
 
     apply_status=ok
     if [[ "${global_changed}" == "true" ]]; then
-        "${S6_SVC}" -d /run/service/janus
         if ! /etc/cont-init.d/10-configure; then
             apply_status=error
         fi
         "${S6_SVC}" -u /run/service/janus
+        for service_channel in 1 2 3 4 5; do
+            "${S6_SVC}" -u "/run/service/input-selector-${service_channel}"
+            "${S6_SVC}" -u "/run/service/srt-relay-${service_channel}"
+        done
     fi
 
     if [[ "${channel}" != 0 ]]; then
@@ -66,4 +74,9 @@ while true; do
     publish_result "${generation}" "${apply_status}"
     echo "[config] generation ${generation} status=${apply_status}"
     rm -f "${PROCESSING_FILE}"
+    if [[ "${global_changed}" == true && "${apply_status}" == ok ]]; then
+        sleep 2
+        "${S6_SVC}" -d /run/service/nginx
+        "${S6_SVC}" -u /run/service/nginx
+    fi
 done

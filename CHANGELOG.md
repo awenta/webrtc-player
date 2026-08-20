@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Automatically bind management, ingest, and WebRTC roles to the primary IPv4 interface with independent UI overrides for multi-interface Linux hosts.
 - Publish versioned `linux/amd64` images to GHCR and provide a pull-based deployment Compose file.
 - Split configuration into per-channel card dialogs and a global-only settings dialog with isolated service restarts.
 - Enable all five channels by default and allow browser previews to be fully disconnected to save client and Janus resources.

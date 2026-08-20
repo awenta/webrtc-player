@@ -7,6 +7,7 @@ channel_id=${PWD##*-}
 
 # shellcheck source=scripts/load-settings.sh
 source /usr/local/bin/load-settings.sh
+load_network_settings || { echo "[selector] effective network settings are unavailable" >&2; exit 1; }
 load_channel_settings "${channel_id}"
 
 if [[ "${CHANNEL_ENABLED}" != "true" ]]; then

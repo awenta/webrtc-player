@@ -16,6 +16,7 @@ This temporary checklist tracks implementation of five concurrent named channels
 - Input monitoring is media-level; native SRT retransmission/RTT telemetry is out of scope.
 - Input, Processing, and Output use contextual editors.
 - Each channel card owns its channel configuration dialog; the top-level settings dialog contains global configuration only.
+- Management, ingest, and WebRTC default to the primary IPv4 interface and can select independent host interfaces.
 
 ## Progress
 
@@ -23,10 +24,11 @@ This temporary checklist tracks implementation of five concurrent named channels
 - [x] Provision five Janus mountpoints and deterministic external/internal ports.
 - [x] Supervise independent selector and SRT relay processes for each channel.
 - [x] Publish version-2 per-channel status and health information.
-- [ ] Add per-channel input and normalized-media counters.
+- [x] Add per-channel input and normalized-media counters.
 - [x] Add loopback-only Janus aggregate viewer/output telemetry.
 - [x] Add selected-channel UI navigation, preview switching, URLs, and contextual editors.
-- [ ] Verify five-channel isolation, configuration impact, telemetry, and resource behavior.
+- [x] Verify five-channel isolation, configuration impact, telemetry, and resource behavior.
+- [x] Add automatic default-route discovery and independent management, ingest, and WebRTC interface roles.
 - [x] Update documentation and changelog.
 
 ## Port Map
@@ -48,3 +50,4 @@ This temporary checklist tracks implementation of five concurrent named channels
 - Unknown or inapplicable metrics are labelled as such rather than reported as zero.
 - Existing persisted settings migrate to Channel 1; all channels without an explicit setting start enabled.
 - The container remains non-root/read-only and the Janus Admin endpoint is loopback-only.
+- Production host networking binds each externally reachable service only to its selected IPv4 role address.

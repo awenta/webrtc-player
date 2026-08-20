@@ -53,6 +53,17 @@ port_count="$(printf '%s\n' "${VIDEO_PORT}" "${AUDIO_PORT}" "${VIDEO_RTCP_PORT}"
 [[ "${port_count}" == "4" ]] || fail "RTP and RTCP ports must all be different"
 [[ -p "${PROGRESS_FIFO}" ]] || fail "FFmpeg progress channel is unavailable"
 
+EFFECTIVE_SRT_URL=${SRT_URL}
+srt_query=
+if [[ "${SRT_URL}" == *\?* ]]; then
+    srt_query=${SRT_URL#*\?}
+fi
+if [[ "${SRT_URL}" == srt://0.0.0.0:* && "&${srt_query}&" == *'&mode=listener&'* ]]; then
+    [[ "${INGEST_IP:-}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] \
+        || fail "INGEST_IP is unavailable for the wildcard SRT listener"
+    EFFECTIVE_SRT_URL="srt://${INGEST_IP}${SRT_URL#srt://0.0.0.0}"
+fi
+
 case "${VIDEO_PRESET}" in
     ultrafast|superfast|veryfast|faster|fast|medium|slow|slower|veryslow) ;;
     *) fail "VIDEO_PRESET is not a supported x264 preset" ;;
@@ -98,7 +109,7 @@ ffmpeg_args=(
     -analyzeduration "${ANALYZE_DURATION_US:-5000000}"
     -thread_queue_size 4096
     "${input_options[@]}"
-    -i "${SRT_URL}"
+    -i "${EFFECTIVE_SRT_URL}"
     -map "${VIDEO_MAP}"
     -vf "${video_filter}"
     -c:v libx264
@@ -137,5 +148,8 @@ if [[ "${SRT_AUDIO}" == "true" ]]; then
 fi
 
 echo "[srt-relay] channel=${CHANNEL_ID:-1} starting codec-normalizing SRT relay (URL and secrets hidden)"
+if [[ "${EFFECTIVE_SRT_URL}" != "${SRT_URL}" ]]; then
+    echo "[srt-relay] wildcard listener resolved to ingest address ${INGEST_IP}"
+fi
 echo "[srt-relay] normalized output: H.264 PT=96; audio=${SRT_AUDIO}; color=${SRT_COLOR_MODE}"
 exec /opt/media/bin/ffmpeg "${ffmpeg_args[@]}"

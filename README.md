@@ -127,11 +127,11 @@ Select **Config** on a channel card to open all settings for that channel:
 - Transcode bitrate, x264 preset, maximum dimensions, and frame rate
 - Direct-RTP audio and the channel's fixed WebRTC/port allocation
 
-The top-level **Global settings** button contains only settings shared by every channel, currently the public IP advertised by Janus. Applying channel settings validates and persists that channel, then briefly restarts only its selector and SRT relay. Applying global settings leaves all channel processes running and restarts the shared Janus service. The browser reconnects automatically when its selected output is affected.
+The top-level **Global settings** button contains the management, ingest, and WebRTC interface roles plus the optional public IP advertised by Janus. Each role defaults to the interface owning the IPv4 default route and can independently select another UP, non-loopback IPv4 interface. Applying channel settings validates and persists that channel, then briefly restarts only its selector and SRT relay. Applying global network settings regenerates the listeners and restarts Janus plus all selectors and SRT relays; Nginx restarts last so the current request can finish. The UI offers to redirect when the management address changes, and the browser reconnects automatically when its selected output is affected.
 
 Persisted UI settings take precedence over matching environment variables on later container starts; use `docker compose down -v` to remove them and return to environment/default values.
 
-Published HTTP, SRT, RTP/RTCP, and ICE ports are shown but remain read-only because Docker port mappings cannot be changed safely from inside the container. The connection guide displays copy-ready SRT, RTP, player, WebSocket, and iframe values based on the host currently used to open the UI.
+Published HTTP, SRT, RTP/RTCP, and ICE ports are shown but remain read-only. The connection guide uses the effective ingest address for sender destinations and the current management address for player, WebSocket, and iframe URLs.
 
 The configuration endpoint is intentionally simple and has no user-account system. Do not expose it to untrusted networks without access control in the deployment reverse proxy.
 
@@ -248,7 +248,11 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 | `VIDEO_RTCP_PORT` | `5006` | Internal/direct H.264 RTCP port |
 | `AUDIO_RTCP_PORT` | `5007` | Internal/direct Opus RTCP port |
 | `AUDIO_ENABLED` | `true` | Enable audio in direct RTP mode |
-| `PUBLIC_IP` | unset | IP advertised by Janus for one-to-one NAT |
+| `NETWORK_MODE` | `bridge` | `bridge` for local Compose port publishing or `host` for direct Linux host interfaces |
+| `MANAGEMENT_INTERFACE` | `auto` | Interface for the UI/API listener; `auto` follows the IPv4 default route |
+| `INGEST_INTERFACE` | `auto` | Interface for direct RTP/RTCP and wildcard SRT listeners |
+| `WEBRTC_INTERFACE` | `auto` | Interface used for Janus ICE candidates and WebRTC media |
+| `PUBLIC_IP` | unset | Optional IPv4 address advertised for static one-to-one NAT |
 | `SRT_URL` | listener on `0.0.0.0:9000` | Complete listener or caller URL |
 | `SRT_AUDIO` | `true` | Expect and transcode an SRT audio stream |
 | `SRT_COLOR_MODE` | `auto` | `auto`, `fast`, or `hdr-to-sdr` |
@@ -297,22 +301,31 @@ Viewing a stream requires no browser-visible secret. At each startup, the contai
 
 Janus always receives media from the loopback input selector. With encrypted SRT, automatic mode disables the selector's external RTP listeners so published RTP ports cannot bypass authentication.
 
+## Multi-Interface Deployment
+
+`compose.deploy.yml` uses Linux host networking so the container can discover the host's real interfaces and bind each network role directly. With all three selectors set to `auto`, the interface owning the lowest-metric UP IPv4 default route is selected. This is the normal zero-configuration deployment:
+
+```bash
+docker compose -f compose.deploy.yml up -d
+```
+
+Open `http://<primary-host-ip>:8088`, then use **Global settings** to place management, ingest, or WebRTC on different interfaces. A selector is persisted by interface name in the `player-config` volume. The container fails closed at startup if a selected interface is absent, down, loopback-only, or has no IPv4 address; set the role back to `auto` or update the environment/configuration after host interface renames.
+
+Host networking does not create Docker firewall rules. Apply host firewall policy to the selected role addresses:
+
+- Management interface: `8088/tcp`
+- Ingest interface: `9000-9004/udp` and `5004-5023/udp`
+- WebRTC interface: `20000-20100/udp`
+
+Loopback remains enabled for internal Nginx, Janus, and monitoring communication. Bridge-mode `docker-compose.yml` is intended for local development; it sees the container's `eth0`, and Docker's published ports provide host access rather than role isolation across host interfaces.
+
 ## NAT and Public Deployment
 
-`PUBLIC_IP` must be the IP browsers use to reach this host. Leave it unset only when Janus interface candidates are directly reachable. For remote or cloud deployments:
+Leave `PUBLIC_IP` unset when internal browsers can directly reach the selected WebRTC interface. This uses ICE Lite with no STUN or TURN dependency. Set `PUBLIC_IP` only when a static one-to-one NAT address must be advertised instead; doing so disables ICE Lite:
 
 ```bash
 PUBLIC_IP=203.0.113.10 docker compose up
 ```
-
-Allow these ports through the host firewall:
-
-- `8088/tcp`: player and Janus WebSocket proxy
-- `9000-9004/udp`: SRT listeners for Channels 1-5
-- `5004-5023/udp`: direct RTP/RTCP for Channels 1-5
-- `20000-20100/udp`: Janus WebRTC ICE/DTLS/SRTP
-
-Host networking can simplify ICE on Linux. Remove Compose port publishing when enabling `network_mode: host`.
 
 Terminate TLS in a trusted reverse proxy for production so the player is served over HTTPS/WSS.
 

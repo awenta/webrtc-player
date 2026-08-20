@@ -7,6 +7,9 @@ source /usr/local/bin/load-settings.sh
 
 readonly CONFIG_DIR=/run/webrtc-player/janus
 readonly CHANNEL_RUNTIME_ROOT=/run/webrtc-player/channels
+readonly NETWORK_JSON=/run/webrtc-player/network.json
+readonly NETWORK_ENV=/run/webrtc-player/network.env
+readonly NGINX_CONFIG=/run/webrtc-player/nginx.conf
 
 fail() {
     echo "[configure] error: $*" >&2
@@ -52,9 +55,11 @@ validate_channel() {
 }
 
 load_global_settings
+NETWORK_MODE=${NETWORK_MODE:-bridge}
+[[ "${NETWORK_MODE}" == host || "${NETWORK_MODE}" == bridge ]] || fail "NETWORK_MODE must be host or bridge"
 if [[ -n "${PUBLIC_IP}" ]]; then
-    [[ "${PUBLIC_IP}" =~ ^[0-9A-Fa-f:.]+$ ]] || fail "PUBLIC_IP must be an IPv4 or IPv6 address"
-    getent ahosts "${PUBLIC_IP}" >/dev/null 2>&1 || fail "PUBLIC_IP is not a valid IP address"
+    /usr/local/bin/network-info validate-ipv4 "${PUBLIC_IP}" \
+        || fail "PUBLIC_IP must be an IPv4 address"
 fi
 
 JANUS_ADMIN_KEY="${JANUS_ADMIN_KEY:-$(< /proc/sys/kernel/random/uuid)}"
@@ -64,21 +69,82 @@ JANUS_ADMIN_SECRET="${JANUS_ADMIN_SECRET:-$(< /proc/sys/kernel/random/uuid)}"
 [[ "${STREAM_SECRET}" =~ ^[A-Za-z0-9._-]+$ ]] || fail "STREAM_SECRET contains unsupported characters"
 [[ "${JANUS_ADMIN_SECRET}" =~ ^[A-Za-z0-9._-]+$ ]] || fail "JANUS_ADMIN_SECRET contains unsupported characters"
 
+install -d -o root -g player -m 1770 /run/webrtc-player
 install -d -o player -g player -m 0750 \
-    /run/webrtc-player "${CONFIG_DIR}" "${CHANNEL_RUNTIME_ROOT}" /config /config/settings /config/channels
+    "${CONFIG_DIR}" "${CHANNEL_RUNTIME_ROOT}" /config /config/settings /config/channels
 chown -R player:player /config
 chmod 0750 /config /config/settings /config/channels
 
+management_resolution=$(/usr/local/bin/network-info resolve "${MANAGEMENT_INTERFACE}") \
+    || fail "MANAGEMENT_INTERFACE does not select an UP IPv4 interface"
+ingest_resolution=$(/usr/local/bin/network-info resolve "${INGEST_INTERFACE}") \
+    || fail "INGEST_INTERFACE does not select an UP IPv4 interface"
+webrtc_resolution=$(/usr/local/bin/network-info resolve "${WEBRTC_INTERFACE}") \
+    || fail "WEBRTC_INTERFACE does not select an UP IPv4 interface"
+IFS=$'\t' read -r MANAGEMENT_INTERFACE_NAME MANAGEMENT_IP <<<"${management_resolution}"
+IFS=$'\t' read -r INGEST_INTERFACE_NAME INGEST_IP <<<"${ingest_resolution}"
+IFS=$'\t' read -r WEBRTC_INTERFACE_NAME WEBRTC_IP <<<"${webrtc_resolution}"
+[[ -n ${MANAGEMENT_INTERFACE_NAME} && -n ${MANAGEMENT_IP} &&
+        -n ${INGEST_INTERFACE_NAME} && -n ${INGEST_IP} &&
+        -n ${WEBRTC_INTERFACE_NAME} && -n ${WEBRTC_IP} ]] || fail "Could not resolve network roles"
+
+umask 0027
+network_json_tmp=$(mktemp "${NETWORK_JSON}.tmp.XXXXXX")
+network_env_tmp=$(mktemp "${NETWORK_ENV}.tmp.XXXXXX")
+cleanup_network_temps() {
+    rm -f "${network_json_tmp:-}" "${network_env_tmp:-}"
+}
+trap cleanup_network_temps EXIT
+/usr/local/bin/network-info json "${NETWORK_MODE}" "${MANAGEMENT_INTERFACE}" \
+    "${INGEST_INTERFACE}" "${WEBRTC_INTERFACE}" >"${network_json_tmp}" \
+    || fail "Could not describe resolved network roles"
+DEFAULT_INTERFACE=$(/usr/local/bin/network-info resolve auto)
+DEFAULT_INTERFACE=${DEFAULT_INTERFACE%%$'\t'*}
+printf '%s\n' \
+    "NETWORK_MODE=${NETWORK_MODE}" \
+    "DEFAULT_INTERFACE=${DEFAULT_INTERFACE}" \
+    "MANAGEMENT_SELECTOR=${MANAGEMENT_INTERFACE}" \
+    "MANAGEMENT_INTERFACE_NAME=${MANAGEMENT_INTERFACE_NAME}" \
+    "MANAGEMENT_IP=${MANAGEMENT_IP}" \
+    "INGEST_SELECTOR=${INGEST_INTERFACE}" \
+    "INGEST_INTERFACE_NAME=${INGEST_INTERFACE_NAME}" \
+    "INGEST_IP=${INGEST_IP}" \
+    "WEBRTC_SELECTOR=${WEBRTC_INTERFACE}" \
+    "WEBRTC_INTERFACE_NAME=${WEBRTC_INTERFACE_NAME}" \
+    "WEBRTC_IP=${WEBRTC_IP}" >"${network_env_tmp}"
+chown root:player "${network_json_tmp}" "${network_env_tmp}"
+chmod 0640 "${network_json_tmp}" "${network_env_tmp}"
+mv -f "${network_json_tmp}" "${NETWORK_JSON}"
+mv -f "${network_env_tmp}" "${NETWORK_ENV}"
+network_json_tmp=
+network_env_tmp=
+load_network_settings || fail "Generated network settings are invalid"
+echo "[configure] network mode=${NETWORK_MODE} management=${MANAGEMENT_INTERFACE_NAME}/${MANAGEMENT_IP} ingest=${INGEST_INTERFACE_NAME}/${INGEST_IP} webrtc=${WEBRTC_INTERFACE_NAME}/${WEBRTC_IP}"
+
+management_listen="# Management interface is loopback"
+if [[ "${MANAGEMENT_IP}" != 127.0.0.1 ]]; then
+    management_listen="listen ${MANAGEMENT_IP}:8088;"
+fi
+sed -e "s|        # __MANAGEMENT_LISTEN__|        ${management_listen}|" \
+    /etc/webrtc-player/nginx/nginx.conf >"${NGINX_CONFIG}.tmp"
+chown root:player "${NGINX_CONFIG}.tmp"
+chmod 0640 "${NGINX_CONFIG}.tmp"
+mv -f "${NGINX_CONFIG}.tmp" "${NGINX_CONFIG}"
+
 if [[ -n "${PUBLIC_IP}" ]]; then
     nat_mapping="nat_1_1_mapping = \"${PUBLIC_IP}\""
+    ice_lite=false
     echo "[configure] advertising PUBLIC_IP=${PUBLIC_IP} in ICE candidates"
 else
     nat_mapping="# No one-to-one NAT mapping configured"
-    echo "[configure] PUBLIC_IP is unset; Janus will advertise its interface addresses"
+    ice_lite=true
+    echo "[configure] PUBLIC_IP is unset; Janus will use direct ICE Lite candidates"
 fi
 
 sed \
     -e "s|# __NAT_MAPPING__|${nat_mapping}|" \
+    -e "s|__ICE_LITE__|${ice_lite}|" \
+    -e "s|__ICE_ENFORCE_LIST__|${WEBRTC_INTERFACE_NAME},${WEBRTC_IP}|" \
     -e "s|__JANUS_ADMIN_SECRET__|${JANUS_ADMIN_SECRET}|" \
     /etc/webrtc-player/janus/janus.jcfg >"${CONFIG_DIR}/janus.jcfg"
 cp /etc/webrtc-player/janus/janus.transport.websockets.jcfg "${CONFIG_DIR}/janus.transport.websockets.jcfg"
@@ -143,6 +209,8 @@ EOF
 done
 
 chown -R player:player "${CONFIG_DIR}" "${CHANNEL_RUNTIME_ROOT}"
-chown player:player /run/webrtc-player /run/webrtc-player/janus-admin.secret
+chown root:player /run/webrtc-player
+chmod 1770 /run/webrtc-player
+chown player:player /run/webrtc-player/janus-admin.secret
 chmod 0600 /run/webrtc-player/janus-admin.secret
 chmod 0640 "${CONFIG_DIR}"/*.jcfg

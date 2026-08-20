@@ -4,6 +4,7 @@
 RUNTIME_SETTINGS_DIR=/config/settings
 CHANNEL_SETTINGS_DIR=/config/channels
 GLOBAL_SETTINGS_FILE=/config/global.conf
+NETWORK_SETTINGS_FILE=/run/webrtc-player/network.env
 
 if [[ $(declare -p _LOAD_SETTINGS_ORIGINAL 2>/dev/null) != declare\ -A* ||
         $(declare -p _LOAD_SETTINGS_ORIGINAL_SET 2>/dev/null) != declare\ -A* ]]; then
@@ -14,6 +15,7 @@ if [[ $(declare -p _LOAD_SETTINGS_ORIGINAL 2>/dev/null) != declare\ -A* ||
         CHANNEL_NAME CHANNEL_ENABLED INPUT_MODE SRT_URL SRT_AUDIO AUDIO_ENABLED \
         SRT_COLOR_MODE VIDEO_PRESET VIDEO_BITRATE VIDEO_BUFFER_SIZE AUDIO_BITRATE MAX_WIDTH MAX_HEIGHT \
         MAX_FPS INPUT_TIMEOUT_MS SRT_PBKEYLEN SRT_PASSPHRASE PUBLIC_IP \
+        MANAGEMENT_INTERFACE INGEST_INTERFACE WEBRTC_INTERFACE NETWORK_MODE \
         SRT_PASSPHRASE_FILE; do
         if [[ -v ${_load_settings_name} ]]; then
             _LOAD_SETTINGS_ORIGINAL["${_load_settings_name}"]="${!_load_settings_name}"
@@ -71,6 +73,7 @@ _resolve_channel_setting() {
 
 load_global_settings() {
     local line key value public_ip=
+    local management_interface=auto ingest_interface=auto webrtc_interface=auto
 
     if [[ -v _LOAD_SETTINGS_ORIGINAL_SET[PUBLIC_IP] &&
             ${_LOAD_SETTINGS_ORIGINAL[PUBLIC_IP]} != *$'\r'* &&
@@ -80,16 +83,88 @@ load_global_settings() {
     if _load_legacy_setting PUBLIC_IP; then
         public_ip=${REPLY}
     fi
+    for key in MANAGEMENT_INTERFACE INGEST_INTERFACE WEBRTC_INTERFACE; do
+        if [[ -v _LOAD_SETTINGS_ORIGINAL_SET["${key}"] &&
+                ${_LOAD_SETTINGS_ORIGINAL["${key}"]} != *$'\r'* &&
+                ${_LOAD_SETTINGS_ORIGINAL["${key}"]} != *$'\n'* ]]; then
+            case ${key} in
+                MANAGEMENT_INTERFACE) management_interface=${_LOAD_SETTINGS_ORIGINAL["${key}"]} ;;
+                INGEST_INTERFACE) ingest_interface=${_LOAD_SETTINGS_ORIGINAL["${key}"]} ;;
+                WEBRTC_INTERFACE) webrtc_interface=${_LOAD_SETTINGS_ORIGINAL["${key}"]} ;;
+            esac
+        fi
+    done
     if [[ -r ${GLOBAL_SETTINGS_FILE} ]]; then
         while IFS= read -r line || [[ -n ${line} ]]; do
             [[ ${line} == *=* && ${line} != *$'\r'* && ${line} != *$'\n'* ]] || continue
             key=${line%%=*}
             value=${line#*=}
-            [[ ${key} == PUBLIC_IP ]] && public_ip=${value}
+            case ${key} in
+                PUBLIC_IP) public_ip=${value} ;;
+                MANAGEMENT_INTERFACE) management_interface=${value} ;;
+                INGEST_INTERFACE) ingest_interface=${value} ;;
+                WEBRTC_INTERFACE) webrtc_interface=${value} ;;
+            esac
         done <"${GLOBAL_SETTINGS_FILE}"
     fi
     PUBLIC_IP=${public_ip}
-    export PUBLIC_IP
+    MANAGEMENT_INTERFACE=${management_interface}
+    INGEST_INTERFACE=${ingest_interface}
+    WEBRTC_INTERFACE=${webrtc_interface}
+    export PUBLIC_IP MANAGEMENT_INTERFACE INGEST_INTERFACE WEBRTC_INTERFACE
+}
+
+load_network_settings() {
+    local line key value
+    local network_mode= default_interface= management_selector= management_name= management_ip=
+    local ingest_selector= ingest_name= ingest_ip= webrtc_selector= webrtc_name= webrtc_ip=
+
+    [[ -r ${NETWORK_SETTINGS_FILE} ]] || return 1
+    while IFS= read -r line || [[ -n ${line} ]]; do
+        [[ ${line} == *=* && ${line} != *$'\r'* && ${line} != *$'\n'* ]] || return 1
+        key=${line%%=*}
+        value=${line#*=}
+        case ${key} in
+            NETWORK_MODE) network_mode=${value} ;;
+            DEFAULT_INTERFACE) default_interface=${value} ;;
+            MANAGEMENT_SELECTOR) management_selector=${value} ;;
+            MANAGEMENT_INTERFACE_NAME) management_name=${value} ;;
+            MANAGEMENT_IP) management_ip=${value} ;;
+            INGEST_SELECTOR) ingest_selector=${value} ;;
+            INGEST_INTERFACE_NAME) ingest_name=${value} ;;
+            INGEST_IP) ingest_ip=${value} ;;
+            WEBRTC_SELECTOR) webrtc_selector=${value} ;;
+            WEBRTC_INTERFACE_NAME) webrtc_name=${value} ;;
+            WEBRTC_IP) webrtc_ip=${value} ;;
+            *) return 1 ;;
+        esac
+    done <"${NETWORK_SETTINGS_FILE}"
+    [[ ${network_mode} == host || ${network_mode} == bridge ]] || return 1
+    for value in "${default_interface}" "${management_name}" "${ingest_name}" "${webrtc_name}"; do
+        [[ ${value} =~ ^[A-Za-z0-9_.:-]{1,15}$ ]] || return 1
+    done
+    for value in "${management_selector}" "${ingest_selector}" "${webrtc_selector}"; do
+        [[ ${value} == auto || ${value} =~ ^[A-Za-z0-9_.:-]{1,15}$ ]] || return 1
+    done
+    for value in "${management_ip}" "${ingest_ip}" "${webrtc_ip}"; do
+        [[ ${value} =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 1
+    done
+
+    NETWORK_MODE=${network_mode}
+    DEFAULT_INTERFACE=${default_interface}
+    MANAGEMENT_SELECTOR=${management_selector}
+    MANAGEMENT_INTERFACE_NAME=${management_name}
+    MANAGEMENT_IP=${management_ip}
+    INGEST_SELECTOR=${ingest_selector}
+    INGEST_INTERFACE_NAME=${ingest_name}
+    INGEST_IP=${ingest_ip}
+    WEBRTC_SELECTOR=${webrtc_selector}
+    WEBRTC_INTERFACE_NAME=${webrtc_name}
+    WEBRTC_IP=${webrtc_ip}
+    RTP_BIND_IP=${ingest_ip}
+    export NETWORK_MODE DEFAULT_INTERFACE MANAGEMENT_SELECTOR MANAGEMENT_INTERFACE_NAME MANAGEMENT_IP \
+        INGEST_SELECTOR INGEST_INTERFACE_NAME INGEST_IP WEBRTC_SELECTOR WEBRTC_INTERFACE_NAME WEBRTC_IP \
+        RTP_BIND_IP
 }
 
 load_channel_settings() {
@@ -163,4 +238,7 @@ load_channel_settings() {
 }
 
 load_global_settings
+if [[ -r ${NETWORK_SETTINGS_FILE} ]]; then
+    load_network_settings
+fi
 load_channel_settings "${CHANNEL_ID:-1}"

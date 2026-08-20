@@ -199,15 +199,18 @@ RUN curl -fsSLo /tmp/nginx.tar.gz "https://nginx.org/download/nginx-${NGINX_VERS
 COPY native/input-selector.c /tmp/input-selector.c
 COPY native/config-api.c /tmp/config-api.c
 COPY native/janus-monitor.c /tmp/janus-monitor.c
+COPY native/network-info.c /tmp/network-info.c
 RUN cc -O2 -pipe -Wall -Wextra -Werror -std=c11 -pthread \
         /tmp/input-selector.c -o /opt/input-selector \
     && cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
         /tmp/config-api.c -o /opt/config-api \
     && cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
+        /tmp/network-info.c -o /opt/network-info \
+    && cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
         /tmp/janus-monitor.c -o /opt/janus-monitor \
         $(pkg-config --cflags --libs libcurl jansson) \
-    && strip /opt/input-selector /opt/config-api /opt/janus-monitor \
-    && rm -f /tmp/input-selector.c /tmp/config-api.c /tmp/janus-monitor.c
+    && strip /opt/input-selector /opt/config-api /opt/network-info /opt/janus-monitor \
+    && rm -f /tmp/input-selector.c /tmp/config-api.c /tmp/network-info.c /tmp/janus-monitor.c
 
 # Collect only the shared libraries required by runtime binaries and plugins.
 # They are flattened into a private directory to avoid merged-/usr symlink
@@ -238,6 +241,7 @@ COPY --from=builder /opt/janus/ /opt/janus/
 COPY --from=builder /opt/nginx/ /opt/nginx/
 COPY --from=builder /opt/input-selector /usr/local/bin/input-selector
 COPY --from=builder /opt/config-api /usr/local/bin/config-api
+COPY --from=builder /opt/network-info /usr/local/bin/network-info
 COPY --from=builder /opt/janus-monitor /usr/local/bin/janus-monitor
 
 RUN printf 'player:x:10001:\n' >>/etc/group \
@@ -245,7 +249,7 @@ RUN printf 'player:x:10001:\n' >>/etc/group \
     && install -d -o 10001 -g 10001 -m 0750 /config /config/settings
 
 COPY janus/ /etc/webrtc-player/janus/
-COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/nginx.conf /etc/webrtc-player/nginx/nginx.conf
 COPY web/ /var/www/html/
 COPY entrypoint.sh /etc/cont-init.d/10-configure
 COPY scripts/ /usr/local/bin/
@@ -267,6 +271,10 @@ RUN chmod 0755 \
     && chown -R player:player /var/www/html
 
 ENV INPUT_MODE=auto \
+    NETWORK_MODE=bridge \
+    MANAGEMENT_INTERFACE=auto \
+    INGEST_INTERFACE=auto \
+    WEBRTC_INTERFACE=auto \
     STREAM_ID=1 \
     VIDEO_PORT=5004 \
     AUDIO_PORT=5005 \

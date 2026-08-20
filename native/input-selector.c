@@ -110,14 +110,14 @@ static const char *source_name(enum source_id source) {
     }
 }
 
-static int bind_input(int port, bool loopback_only) {
+static int bind_input(int port, const struct in_addr *bind_address) {
     int fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     int receive_buffer = 4 * 1024 * 1024;
     int reuse = 1;
     struct sockaddr_in address = {
         .sin_family = AF_INET,
         .sin_port = htons((uint16_t)port),
-        .sin_addr.s_addr = htonl(loopback_only ? INADDR_LOOPBACK : INADDR_ANY),
+        .sin_addr = *bind_address,
     };
 
     if (fd < 0) {
@@ -287,6 +287,9 @@ int main(void) {
     const char *status_path = getenv("SELECTOR_STATUS_PATH");
     const char *passphrase = getenv("SRT_PASSPHRASE");
     const char *passphrase_file = getenv("SRT_PASSPHRASE_FILE");
+    const char *rtp_bind_ip = getenv("RTP_BIND_IP");
+    struct in_addr direct_bind_address;
+    const struct in_addr loopback_address = {.s_addr = htonl(INADDR_LOOPBACK)};
     bool direct_enabled;
     bool srt_enabled;
     int direct_ports[CHANNEL_COUNT] = {
@@ -334,6 +337,12 @@ int main(void) {
     if (mode == NULL || *mode == '\0') {
         mode = "auto";
     }
+    if (rtp_bind_ip == NULL || inet_pton(AF_INET, rtp_bind_ip, &direct_bind_address) != 1 ||
+            direct_bind_address.s_addr == htonl(INADDR_ANY) ||
+            direct_bind_address.s_addr == htonl(INADDR_LOOPBACK)) {
+        fprintf(stderr, "[input-selector] RTP_BIND_IP must be a non-loopback IPv4 address\n");
+        return EXIT_FAILURE;
+    }
     direct_enabled = strcmp(mode, "auto") == 0 || strcmp(mode, "rtp") == 0;
     srt_enabled = strcmp(mode, "auto") == 0 || strcmp(mode, "srt") == 0;
     if (!direct_enabled && !srt_enabled) {
@@ -352,7 +361,7 @@ int main(void) {
         output_queue.outputs[channel].sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         if (direct_enabled) {
             inputs[input_count] = (struct input_socket){
-                .fd = bind_input(direct_ports[channel], false),
+                .fd = bind_input(direct_ports[channel], &direct_bind_address),
                 .source = SOURCE_DIRECT,
                 .channel = (enum channel_id)channel,
             };
@@ -360,7 +369,7 @@ int main(void) {
         }
         if (srt_enabled) {
             inputs[input_count] = (struct input_socket){
-                .fd = bind_input(srt_ports[channel], true),
+                .fd = bind_input(srt_ports[channel], &loopback_address),
                 .source = SOURCE_SRT,
                 .channel = (enum channel_id)channel,
             };
@@ -388,8 +397,9 @@ int main(void) {
     signal(SIGINT, stop_running);
     signal(SIGTERM, stop_running);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("[input-selector] ready: direct-rtp=%s srt=%s timeout=%dms pacing=%dus/%d packets\n",
-            direct_enabled ? "enabled" : "disabled", srt_enabled ? "enabled" : "disabled",
+    printf("[input-selector] ready: direct-rtp=%s bind=%s srt=%s timeout=%dms pacing=%dus/%d packets\n",
+            direct_enabled ? "enabled" : "disabled", rtp_bind_ip,
+            srt_enabled ? "enabled" : "disabled",
             timeout_ms, video_pacing_us, VIDEO_PACING_BATCH);
 
     while (running) {

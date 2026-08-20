@@ -2,12 +2,14 @@ services:
   webrtc-player:
     image: ${WEBRTC_PLAYER_IMAGE:-ghcr.io/awenta/webrtc-player:latest}
     platform: linux/amd64
-    ports:
-      - "8088:8088/tcp"
-      - "5004-5023:5004-5023/udp"
-      - "9000-9004:9000-9004/udp"
-      - "20000-20100:20000-20100/udp"
+    # Host networking exposes process listeners directly on the Linux host.
+    # Host firewall policy applies; no Docker port mappings are used.
+    network_mode: host
     environment:
+      NETWORK_MODE: host
+      MANAGEMENT_INTERFACE: ${MANAGEMENT_INTERFACE:-auto}
+      INGEST_INTERFACE: ${INGEST_INTERFACE:-auto}
+      WEBRTC_INTERFACE: ${WEBRTC_INTERFACE:-auto}
       INPUT_MODE: ${INPUT_MODE:-auto}
       STREAM_ID: ${STREAM_ID:-1}
       VIDEO_PORT: ${VIDEO_PORT:-5004}

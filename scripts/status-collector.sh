@@ -8,6 +8,7 @@ source /usr/local/bin/load-settings.sh
 readonly STATUS_FILE=/run/webrtc-player/status.json
 readonly STATUS_TMP=/run/webrtc-player/status.json.tmp
 readonly CHANNEL_ROOT=/run/webrtc-player/channels
+readonly NETWORK_JSON_FILE=/run/webrtc-player/network.json
 
 started_at=$(date +%s)
 cpu_count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')
@@ -64,6 +65,18 @@ parse_srt_url() {
         parsed_srt_role=rendezvous
     fi
     return 0
+}
+
+read_effective_network() {
+    local size owner
+    load_network_settings || return 1
+    [[ -f ${NETWORK_JSON_FILE} && ! -L ${NETWORK_JSON_FILE} && -r ${NETWORK_JSON_FILE} ]] || return 1
+    owner=$(stat -c %u "${NETWORK_JSON_FILE}") || return 1
+    [[ ${owner} == 0 ]] || return 1
+    size=$(stat -c %s "${NETWORK_JSON_FILE}") || return 1
+    [[ ${size} =~ ^[0-9]+$ ]] && (( size >= 2 && size <= 16384 )) || return 1
+    NETWORK_JSON_TEXT=$(<"${NETWORK_JSON_FILE}")
+    [[ ${NETWORK_JSON_TEXT} == \{*\} ]] || return 1
 }
 
 read_service_process() {
@@ -125,6 +138,7 @@ done
 while true; do
     now=$(date +%s)
     load_global_settings
+    read_effective_network || { echo "[status] effective network state is invalid" >&2; exit 1; }
 
     for channel_id in 1 2 3 4 5; do
         progress_fd=${progress_fds[${channel_id}]}
@@ -179,6 +193,10 @@ EOF
     for channel_id in 1 2 3 4 5; do
         load_channel_settings "${channel_id}"
         parse_srt_url "${SRT_URL}"
+        effective_srt_host=${parsed_srt_host}
+        if [[ "${parsed_srt_role}" == listener && "${parsed_srt_host}" == 0.0.0.0 ]]; then
+            effective_srt_host=${INGEST_IP}
+        fi
         selector_status="${CHANNEL_ROOT}/${channel_id}/input-selector.status"
         selected_source=none
         direct_enabled=false
@@ -210,7 +228,7 @@ EOF
         [[ "${CHANNEL_ENABLED}" == true && "${selected_source}" != none ]] && input_state=active
         input_transport="RTP + SRT"
         input_role=automatic
-        input_host=0.0.0.0
+        input_host=${INGEST_IP}
         input_port=
         input_audio_enabled=${AUDIO_ENABLED}
         processing_mode=standby
@@ -222,7 +240,7 @@ EOF
         elif [[ "${selected_source}" == srt || "${INPUT_MODE}" == srt ]]; then
             input_transport="SRT / MPEG-TS"
             input_role=${parsed_srt_role}
-            input_host=${parsed_srt_host}
+            input_host=${effective_srt_host}
             input_port=${parsed_srt_port}
             input_audio_enabled=${SRT_AUDIO}
             processing_mode=transcode
@@ -310,7 +328,7 @@ EOF
         "remotePort": ${remote_port_json},
         "acceptsRtp": ${direct_enabled},
         "acceptsSrt": ${srt_enabled},
-        "srtAddress": $(json_quote "${parsed_srt_host}"),
+        "srtAddress": $(json_quote "${effective_srt_host}"),
         "srtPort": $(decimal_or_null "${parsed_srt_port}"),
         "srtPublicPort": ${SRT_PUBLIC_PORT},
         "videoRtpPort": ${VIDEO_PORT},
@@ -369,6 +387,7 @@ EOF
     "icePortEnd": 20100,
     "publicIp": ${public_ip_json},
     "containerIp": ${container_ip_json},
+    "network": ${NETWORK_JSON_TEXT},
     "services": {
       "janus": { "running": ${process_running[janus]:-false}, "cpuPercent": $(tenths "${cpu_tenths[janus]:-0}"), "memoryMiB": $(tenths "$(( ${rss_kib[janus]:-0} * 10 / 1024 ))") },
       "nginx": { "running": ${process_running[nginx]:-false}, "cpuPercent": $(tenths "${cpu_tenths[nginx]:-0}"), "memoryMiB": $(tenths "$(( ${rss_kib[nginx]:-0} * 10 / 1024 ))") }

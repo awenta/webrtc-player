@@ -14,6 +14,7 @@
 #include <strings.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -28,6 +29,9 @@
 #define LEGACY_SETTINGS_DIR "/config/settings"
 #define APPLY_REQUEST "/run/webrtc-player/config-apply.request"
 #define APPLY_RESULT "/run/webrtc-player/config-apply.result"
+#define NETWORK_JSON "/run/webrtc-player/network.json"
+#define NETWORK_INFO "/usr/local/bin/network-info"
+#define NETWORK_JSON_CAPACITY 16384
 
 struct field {
     char *name;
@@ -61,6 +65,13 @@ struct channel_config {
     char input_timeout_ms[16];
     char srt_pbkeylen[16];
     char srt_passphrase[REQUEST_CAPACITY];
+};
+
+struct global_config {
+    char public_ip[128];
+    char management_interface[64];
+    char ingest_interface[64];
+    char webrtc_interface[64];
 };
 
 struct config_pair {
@@ -220,20 +231,40 @@ static void load_channel_config(unsigned int channel_id, struct channel_config *
     load_channel_file(path, config);
 }
 
-static void load_global_config(char *public_ip, size_t capacity) {
+static void assign_global_value(struct global_config *config, const char *key, const char *value) {
+    if (strcmp(key, "PUBLIC_IP") == 0) {
+        (void)copy_value(config->public_ip, sizeof(config->public_ip), value);
+    } else if (strcmp(key, "MANAGEMENT_INTERFACE") == 0) {
+        (void)copy_value(config->management_interface, sizeof(config->management_interface), value);
+    } else if (strcmp(key, "INGEST_INTERFACE") == 0) {
+        (void)copy_value(config->ingest_interface, sizeof(config->ingest_interface), value);
+    } else if (strcmp(key, "WEBRTC_INTERFACE") == 0) {
+        (void)copy_value(config->webrtc_interface, sizeof(config->webrtc_interface), value);
+    }
+}
+
+static void load_global_config(struct global_config *config) {
     FILE *file;
     char line[CONFIG_LINE_CAPACITY];
-    const char *environment = getenv("PUBLIC_IP");
     char legacy_path[512];
     char legacy_value[CONFIG_LINE_CAPACITY];
+    static const char *const names[] = {
+        "PUBLIC_IP", "MANAGEMENT_INTERFACE", "INGEST_INTERFACE", "WEBRTC_INTERFACE"
+    };
 
-    (void)copy_value(public_ip, capacity, "");
-    if (environment != NULL && !contains_line_break(environment)) {
-        (void)copy_value(public_ip, capacity, environment);
+    memset(config, 0, sizeof(*config));
+    (void)copy_value(config->management_interface, sizeof(config->management_interface), "auto");
+    (void)copy_value(config->ingest_interface, sizeof(config->ingest_interface), "auto");
+    (void)copy_value(config->webrtc_interface, sizeof(config->webrtc_interface), "auto");
+    for (size_t index = 0; index < sizeof(names) / sizeof(names[0]); index++) {
+        const char *environment = getenv(names[index]);
+        if (environment != NULL && !contains_line_break(environment)) {
+            assign_global_value(config, names[index], environment);
+        }
     }
     snprintf(legacy_path, sizeof(legacy_path), "%s/PUBLIC_IP", LEGACY_SETTINGS_DIR);
     if (read_single_line(legacy_path, legacy_value, sizeof(legacy_value))) {
-        (void)copy_value(public_ip, capacity, legacy_value);
+        (void)copy_value(config->public_ip, sizeof(config->public_ip), legacy_value);
     }
 
     file = fopen(GLOBAL_CONFIG, "r");
@@ -253,9 +284,7 @@ static void load_global_config(char *public_ip, size_t capacity) {
         separator = strchr(line, '=');
         if (separator == NULL) continue;
         *separator = '\0';
-        if (strcmp(line, "PUBLIC_IP") == 0) {
-            (void)copy_value(public_ip, capacity, separator + 1);
-        }
+        assign_global_value(config, line, separator + 1);
     }
     fclose(file);
 }
@@ -599,10 +628,68 @@ static bool valid_bitrate(const char *value) {
 }
 
 static bool valid_public_ip(const char *value) {
-    unsigned char address[sizeof(struct in6_addr)];
+    struct in_addr address;
     if (value == NULL) return false;
-    return *value == '\0' || inet_pton(AF_INET, value, address) == 1 ||
-            inet_pton(AF_INET6, value, address) == 1;
+    return *value == '\0' || inet_pton(AF_INET, value, &address) == 1;
+}
+
+static bool valid_interface_selector(const char *value) {
+    pid_t child;
+    int status;
+
+    if (value == NULL || contains_line_break(value) || strlen(value) >= 64) return false;
+    child = fork();
+    if (child < 0) return false;
+    if (child == 0) {
+        int null_descriptor = open("/dev/null", O_WRONLY | O_CLOEXEC);
+        if (null_descriptor >= 0) {
+            (void)dup2(null_descriptor, STDOUT_FILENO);
+            (void)dup2(null_descriptor, STDERR_FILENO);
+            close(null_descriptor);
+        }
+        execl(NETWORK_INFO, NETWORK_INFO, "validate", value, (char *)NULL);
+        _exit(127);
+    }
+    do {
+        if (waitpid(child, &status, 0) >= 0) break;
+        if (errno != EINTR) return false;
+    } while (true);
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+}
+
+static bool load_network_json(char *json, size_t capacity) {
+    int descriptor = open(NETWORK_JSON, O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    struct stat status;
+    size_t length = 0;
+    size_t start = 0;
+    size_t end;
+
+    if (descriptor < 0 || fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) ||
+            status.st_uid != 0 || status.st_size < 2 || (unsigned long long)status.st_size >= capacity) {
+        if (descriptor >= 0) close(descriptor);
+        return false;
+    }
+    while (length < (size_t)status.st_size) {
+        ssize_t count = read(descriptor, json + length, (size_t)status.st_size - length);
+        if (count <= 0) {
+            close(descriptor);
+            return false;
+        }
+        length += (size_t)count;
+    }
+    if (close(descriptor) != 0) return false;
+    json[length] = '\0';
+    while (start < length && isspace((unsigned char)json[start])) start++;
+    end = length;
+    while (end > start && isspace((unsigned char)json[end - 1])) end--;
+    if (end - start < 2 || json[start] != '{' || json[end - 1] != '}') return false;
+    for (size_t index = start; index < end; index++) {
+        unsigned char character = (unsigned char)json[index];
+        if (character == '\0' || (character < 0x20 && !isspace(character))) return false;
+    }
+    if (start > 0) memmove(json, json + start, end - start);
+    json[end - start] = '\0';
+    return true;
 }
 
 static bool valid_srt_url(const char *value) {
@@ -729,17 +816,30 @@ static bool append_channel_json(char *response, size_t capacity, size_t *length,
 
 static void handle_get(int client) {
     char response[RESPONSE_CAPACITY];
-    char public_ip[128];
+    char network_json[NETWORK_JSON_CAPACITY];
+    struct global_config global;
     struct channel_config config;
     size_t length = 0;
     bool ok;
 
     response[0] = '\0';
-    load_global_config(public_ip, sizeof(public_ip));
+    load_global_config(&global);
+    if (!load_network_json(network_json, sizeof(network_json))) {
+        send_response(client, 500, "{\"error\":\"Effective network state is unavailable\"}");
+        return;
+    }
     ok = append_literal(response, sizeof(response), &length,
             "{\"version\":2,\"global\":{\"PUBLIC_IP\":") &&
-            append_json_string(response, sizeof(response), &length, public_ip) &&
-            append_literal(response, sizeof(response), &length, "},\"channels\":[");
+            append_json_string(response, sizeof(response), &length, global.public_ip) &&
+            append_literal(response, sizeof(response), &length, ",\"MANAGEMENT_INTERFACE\":") &&
+            append_json_string(response, sizeof(response), &length, global.management_interface) &&
+            append_literal(response, sizeof(response), &length, ",\"INGEST_INTERFACE\":") &&
+            append_json_string(response, sizeof(response), &length, global.ingest_interface) &&
+            append_literal(response, sizeof(response), &length, ",\"WEBRTC_INTERFACE\":") &&
+            append_json_string(response, sizeof(response), &length, global.webrtc_interface) &&
+            append_literal(response, sizeof(response), &length, "},\"network\":") &&
+            append_literal(response, sizeof(response), &length, network_json) &&
+            append_literal(response, sizeof(response), &length, ",\"channels\":[");
     for (unsigned int channel_id = 1; ok && channel_id <= CHANNEL_COUNT; channel_id++) {
         load_channel_config(channel_id, &config);
         if (channel_id > 1) ok = append_literal(response, sizeof(response), &length, ",");
@@ -755,16 +855,23 @@ static void handle_get(int client) {
 
 static void handle_global_post(int client, struct field *fields, size_t count) {
     const char *public_ip = field_value(fields, count, "PUBLIC_IP");
-    struct config_pair global_pairs[1];
+    const char *management_interface = field_value(fields, count, "MANAGEMENT_INTERFACE");
+    const char *ingest_interface = field_value(fields, count, "INGEST_INTERFACE");
+    const char *webrtc_interface = field_value(fields, count, "WEBRTC_INTERFACE");
+    struct config_pair global_pairs[4];
     struct file_snapshot global_snapshot;
-    char old_public_ip[128];
+    struct global_config old_config;
 
-    if (!valid_public_ip(public_ip)) {
+    if (!valid_public_ip(public_ip) || !valid_interface_selector(management_interface) ||
+            !valid_interface_selector(ingest_interface) || !valid_interface_selector(webrtc_interface)) {
         send_response(client, 400, "{\"error\":\"Global settings are invalid\"}");
         return;
     }
-    load_global_config(old_public_ip, sizeof(old_public_ip));
-    if (strcmp(old_public_ip, public_ip) == 0) {
+    load_global_config(&old_config);
+    if (strcmp(old_config.public_ip, public_ip) == 0 &&
+            strcmp(old_config.management_interface, management_interface) == 0 &&
+            strcmp(old_config.ingest_interface, ingest_interface) == 0 &&
+            strcmp(old_config.webrtc_interface, webrtc_interface) == 0) {
         send_response(client, 200,
                 "{\"ok\":true,\"scope\":\"global\",\"message\":\"Global settings unchanged\"}");
         return;
@@ -778,7 +885,10 @@ static void handle_global_post(int client, struct field *fields, size_t count) {
         return;
     }
     global_pairs[0] = (struct config_pair){"PUBLIC_IP", public_ip};
-    if (!atomic_write_pairs(GLOBAL_CONFIG, global_pairs, 1)) {
+    global_pairs[1] = (struct config_pair){"MANAGEMENT_INTERFACE", management_interface};
+    global_pairs[2] = (struct config_pair){"INGEST_INTERFACE", ingest_interface};
+    global_pairs[3] = (struct config_pair){"WEBRTC_INTERFACE", webrtc_interface};
+    if (!atomic_write_pairs(GLOBAL_CONFIG, global_pairs, 4)) {
         bool restored = restore_snapshot(GLOBAL_CONFIG, &global_snapshot);
         free_snapshot(&global_snapshot);
         send_response(client, 500, restored ?
@@ -788,10 +898,11 @@ static void handle_global_post(int client, struct field *fields, size_t count) {
     }
     if (!request_apply(0, true)) {
         bool restored = restore_snapshot(GLOBAL_CONFIG, &global_snapshot);
+        bool reapplied = restored && request_apply(0, true);
         free_snapshot(&global_snapshot);
-        send_response(client, 500, restored ?
+        send_response(client, 500, reapplied ?
                 "{\"error\":\"Services could not apply global settings; previous settings were restored\"}" :
-                "{\"error\":\"Services could not apply global settings and rollback was incomplete\"}");
+                "{\"error\":\"Services could not apply global settings and runtime rollback was incomplete\"}");
         return;
     }
     free_snapshot(&global_snapshot);

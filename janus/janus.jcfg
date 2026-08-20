@@ -8,6 +8,7 @@ general: {
 	debug_level = 4
 	debug_colors = false
 	server_name = "janus-webrtc-player"
+	ipv6 = false
 	admin_secret = "__JANUS_ADMIN_SECRET__"
 	exit_on_dl_error = true
 }
@@ -23,9 +24,10 @@ media: {
 
 nat: {
 	nice_debug = false
-	ice_lite = true
+	ice_lite = __ICE_LITE__
 	ice_tcp = false
 	full_trickle = false
+	ice_enforce_list = "__ICE_ENFORCE_LIST__"
 	# __NAT_MAPPING__
 }
 

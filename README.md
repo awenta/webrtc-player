@@ -50,6 +50,49 @@ The player begins muted to satisfy browser autoplay rules. Its native controls c
 | 4 | `?stream=4` | 9003 | 5016-5019 |
 | 5 | `?stream=5` | 9004 | 5020-5023 |
 
+## Deploy a Published Image
+
+GitHub Actions publishes the default branch and version tags to GitHub Container Registry as a `linux/amd64` image:
+
+```text
+ghcr.io/awenta/webrtc-player
+```
+
+Download `compose.deploy.yml` on an x86-64 Docker host, then start the published image without cloning or building the repository:
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/awenta/webrtc-player/claude/webrtc-video-player-iframe-phPMa/compose.deploy.yml
+docker compose -f compose.deploy.yml pull
+docker compose -f compose.deploy.yml up -d
+```
+
+The default image is `latest`. For a reproducible deployment, select a version or immutable SHA tag:
+
+```bash
+WEBRTC_PLAYER_IMAGE=ghcr.io/awenta/webrtc-player:v1.0.0 docker compose -f compose.deploy.yml up -d
+```
+
+To upgrade while preserving channel configuration:
+
+```bash
+docker compose -f compose.deploy.yml pull
+docker compose -f compose.deploy.yml up -d
+```
+
+The `player-config` volume survives image upgrades and container recreation. Do not use `docker compose down -v` unless the persisted channel/global settings should be deleted.
+
+The repository is public, but a newly created GHCR package may need to be changed to **Public** once in the package settings before anonymous pulls work. If the package remains private, authenticate the deployment host with a GitHub token that has `read:packages`:
+
+```bash
+printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u YOUR_GITHUB_USER --password-stdin
+```
+
+Publishing behavior:
+
+- A default-branch build publishes `latest` and `sha-<commit>`.
+- A tag such as `v1.2.3` publishes `v1.2.3`, `1.2.3`, `1.2`, and `sha-<commit>`.
+- The workflow can also be started manually from the GitHub Actions page.
+
 ## Automatic Input Selection
 
 `INPUT_MODE=auto` is the default. The container listens for supported direct RTP and SRT at the same time, validates incoming RTP, and locks onto the first source that delivers a valid H.264 video sequence. The selected input is forwarded to the existing Janus WebRTC output; the WebRTC stream ID and browser workflow do not change.

@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 
+- Publish versioned `linux/amd64` images to GHCR and provide a pull-based deployment Compose file.
 - Split configuration into per-channel card dialogs and a global-only settings dialog with isolated service restarts.
 - Enable all five channels by default and allow browser previews to be fully disconnected to save client and Janus resources.
 - Add protected H.264/HEVC SRT listener and caller ingest with codec normalization, pinned media components, and a hardened multi-stage container.

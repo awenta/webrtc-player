@@ -1,0 +1,53 @@
+services:
+  webrtc-player:
+    image: ${WEBRTC_PLAYER_IMAGE:-ghcr.io/awenta/webrtc-player:latest}
+    platform: linux/amd64
+    ports:
+      - "8088:8088/tcp"
+      - "5004-5023:5004-5023/udp"
+      - "9000-9004:9000-9004/udp"
+      - "20000-20100:20000-20100/udp"
+    environment:
+      INPUT_MODE: ${INPUT_MODE:-auto}
+      STREAM_ID: ${STREAM_ID:-1}
+      VIDEO_PORT: ${VIDEO_PORT:-5004}
+      AUDIO_PORT: ${AUDIO_PORT:-5005}
+      VIDEO_RTCP_PORT: ${VIDEO_RTCP_PORT:-5006}
+      AUDIO_RTCP_PORT: ${AUDIO_RTCP_PORT:-5007}
+      SRT_PUBLIC_PORT: ${SRT_PORT:-9000}
+      AUDIO_ENABLED: ${AUDIO_ENABLED:-true}
+      PUBLIC_IP: ${PUBLIC_IP:-}
+      SRT_URL: ${SRT_URL:-srt://0.0.0.0:9000?mode=listener&latency=120000}
+      SRT_AUDIO: ${SRT_AUDIO:-true}
+      SRT_COLOR_MODE: ${SRT_COLOR_MODE:-auto}
+      SRT_PASSPHRASE_FILE: ${SRT_PASSPHRASE_FILE:-}
+      SRT_PBKEYLEN: ${SRT_PBKEYLEN:-16}
+      VIDEO_BITRATE: ${VIDEO_BITRATE:-6M}
+      VIDEO_BUFFER_SIZE: ${VIDEO_BUFFER_SIZE:-2M}
+      VIDEO_PRESET: ${VIDEO_PRESET:-veryfast}
+      AUDIO_BITRATE: ${AUDIO_BITRATE:-128k}
+      MAX_WIDTH: ${MAX_WIDTH:-1920}
+      MAX_HEIGHT: ${MAX_HEIGHT:-1080}
+      MAX_FPS: ${MAX_FPS:-60}
+      VIDEO_MAP: ${VIDEO_MAP:-0:v:0}
+      AUDIO_MAP: ${AUDIO_MAP:-0:a:0}
+      FFMPEG_LOG_LEVEL: ${FFMPEG_LOG_LEVEL:-warning}
+      PROBE_SIZE: ${PROBE_SIZE:-10M}
+      ANALYZE_DURATION_US: ${ANALYZE_DURATION_US:-5000000}
+      INPUT_TIMEOUT_MS: ${INPUT_TIMEOUT_MS:-5000}
+      RTP_PACING_US: ${RTP_PACING_US:-100}
+      JANUS_ADMIN_KEY: ${JANUS_ADMIN_KEY:-}
+      STREAM_SECRET: ${STREAM_SECRET:-}
+    volumes:
+      - player-config:/config
+    read_only: true
+    tmpfs:
+      - /run:rw,exec,nosuid,size=32m
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+volumes:
+  player-config:

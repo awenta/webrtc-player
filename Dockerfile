@@ -146,9 +146,11 @@ RUN git clone --filter=blob:none https://github.com/cisco/libsrtp.git /tmp/libsr
         >/opt/janus-deps/lib/pkgconfig/libsrtp2.pc \
     && rm -rf /tmp/libsrtp
 
+COPY patches/janus-streaming-udp-buffer.patch /tmp/janus-streaming-udp-buffer.patch
 RUN git clone --filter=blob:none https://github.com/meetecho/janus-gateway.git /tmp/janus \
     && cd /tmp/janus \
     && git checkout "${JANUS_COMMIT}" \
+    && git apply /tmp/janus-streaming-udp-buffer.patch \
     && sh autogen.sh \
     && PKG_CONFIG_PATH=/opt/janus-deps/lib/pkgconfig \
        CPPFLAGS=-I/opt/janus-deps/include \
@@ -172,7 +174,7 @@ RUN git clone --filter=blob:none https://github.com/meetecho/janus-gateway.git /
         --enable-plugin-streaming \
     && make -j"$(nproc)" \
     && make install \
-    && rm -rf /tmp/janus
+    && rm -rf /tmp/janus /tmp/janus-streaming-udp-buffer.patch
 
 RUN curl -fsSLo /tmp/nginx.tar.gz "https://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz" \
     && echo "${NGINX_SHA256}  /tmp/nginx.tar.gz" | sha256sum -c - \
@@ -195,10 +197,13 @@ RUN curl -fsSLo /tmp/nginx.tar.gz "https://nginx.org/download/nginx-${NGINX_VERS
     && rm -rf /tmp/nginx*
 
 COPY native/input-selector.c /tmp/input-selector.c
-RUN cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
+COPY native/config-api.c /tmp/config-api.c
+RUN cc -O2 -pipe -Wall -Wextra -Werror -std=c11 -pthread \
         /tmp/input-selector.c -o /opt/input-selector \
-    && strip /opt/input-selector \
-    && rm -f /tmp/input-selector.c
+    && cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
+        /tmp/config-api.c -o /opt/config-api \
+    && strip /opt/input-selector /opt/config-api \
+    && rm -f /tmp/input-selector.c /tmp/config-api.c
 
 # Collect only the shared libraries required by runtime binaries and plugins.
 # They are flattened into a private directory to avoid merged-/usr symlink
@@ -228,9 +233,11 @@ COPY --from=builder /opt/janus-deps/ /opt/janus-deps/
 COPY --from=builder /opt/janus/ /opt/janus/
 COPY --from=builder /opt/nginx/ /opt/nginx/
 COPY --from=builder /opt/input-selector /usr/local/bin/input-selector
+COPY --from=builder /opt/config-api /usr/local/bin/config-api
 
 RUN printf 'player:x:10001:\n' >>/etc/group \
-    && printf 'player:x:10001:10001:WebRTC Player:/nonexistent:/usr/sbin/nologin\n' >>/etc/passwd
+    && printf 'player:x:10001:10001:WebRTC Player:/nonexistent:/usr/sbin/nologin\n' >>/etc/passwd \
+    && install -d -o 10001 -g 10001 -m 0750 /config /config/settings
 
 COPY janus/ /etc/webrtc-player/janus/
 COPY nginx/nginx.conf /etc/nginx/nginx.conf
@@ -252,6 +259,8 @@ ENV INPUT_MODE=auto \
     AUDIO_PORT=5005 \
     VIDEO_RTCP_PORT=5006 \
     AUDIO_RTCP_PORT=5007 \
+    RTP_PACING_US=100 \
+    SRT_PUBLIC_PORT=9000 \
     SRT_RELAY_VIDEO_PORT=15004 \
     SRT_RELAY_AUDIO_PORT=15005 \
     SRT_RELAY_VIDEO_RTCP_PORT=15006 \
@@ -265,6 +274,7 @@ ENV INPUT_MODE=auto \
     SRT_AUDIO=true \
     SRT_COLOR_MODE=auto \
     VIDEO_BITRATE=6M \
+    VIDEO_BUFFER_SIZE=2M \
     VIDEO_PRESET=veryfast \
     AUDIO_BITRATE=128k \
     MAX_FPS=60 \

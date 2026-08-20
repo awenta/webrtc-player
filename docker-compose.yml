@@ -19,6 +19,7 @@ services:
       AUDIO_PORT: ${AUDIO_PORT:-5005}
       VIDEO_RTCP_PORT: ${VIDEO_RTCP_PORT:-5006}
       AUDIO_RTCP_PORT: ${AUDIO_RTCP_PORT:-5007}
+      SRT_PUBLIC_PORT: ${SRT_PORT:-9000}
       AUDIO_ENABLED: ${AUDIO_ENABLED:-true}
       PUBLIC_IP: ${PUBLIC_IP:-}
       SRT_URL: ${SRT_URL:-srt://0.0.0.0:9000?mode=listener&latency=120000}
@@ -27,6 +28,7 @@ services:
       SRT_PASSPHRASE_FILE: ${SRT_PASSPHRASE_FILE:-}
       SRT_PBKEYLEN: ${SRT_PBKEYLEN:-16}
       VIDEO_BITRATE: ${VIDEO_BITRATE:-6M}
+      VIDEO_BUFFER_SIZE: ${VIDEO_BUFFER_SIZE:-2M}
       VIDEO_PRESET: ${VIDEO_PRESET:-veryfast}
       AUDIO_BITRATE: ${AUDIO_BITRATE:-128k}
       MAX_WIDTH: ${MAX_WIDTH:-1920}
@@ -38,8 +40,11 @@ services:
       PROBE_SIZE: ${PROBE_SIZE:-10M}
       ANALYZE_DURATION_US: ${ANALYZE_DURATION_US:-5000000}
       INPUT_TIMEOUT_MS: ${INPUT_TIMEOUT_MS:-5000}
+      RTP_PACING_US: ${RTP_PACING_US:-100}
       JANUS_ADMIN_KEY: ${JANUS_ADMIN_KEY:-}
       STREAM_SECRET: ${STREAM_SECRET:-}
+    volumes:
+      - player-config:/config
     read_only: true
     tmpfs:
       - /run:rw,exec,nosuid,size=32m
@@ -61,3 +66,6 @@ services:
 # secrets:
 #   srt_passphrase:
 #     file: ./srt-passphrase.txt
+
+volumes:
+  player-config:

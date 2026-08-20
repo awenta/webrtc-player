@@ -16,6 +16,7 @@ AUDIO_RTCP_PORT="${AUDIO_RTCP_PORT:-5007}"
 AUDIO_ENABLED="${AUDIO_ENABLED:-true}"
 SRT_AUDIO="${SRT_AUDIO:-true}"
 PUBLIC_IP="${PUBLIC_IP:-}"
+SRT_PUBLIC_PORT="${SRT_PUBLIC_PORT:-9000}"
 
 started_at="$(date +%s)"
 cpu_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')"
@@ -148,6 +149,7 @@ while true; do
     srt_enabled=false
     remote_address=""
     remote_port=""
+    forward_drops=0
     if [[ -r "${SELECTOR_STATUS}" ]]; then
         while IFS='=' read -r selector_key selector_value; do
             case "${selector_key}" in
@@ -156,6 +158,7 @@ while true; do
                 srt_enabled) srt_enabled="${selector_value}" ;;
                 remote_address) remote_address="${selector_value}" ;;
                 remote_port) remote_port="${selector_value}" ;;
+                forward_drops) forward_drops="${selector_value}" ;;
             esac
         done <"${SELECTOR_STATUS}"
     fi
@@ -232,11 +235,13 @@ while true; do
     "acceptsSrt": ${srt_enabled},
     "srtAddress": $(json_quote "${srt_host}"),
     "srtPort": $(decimal_or_null "${srt_port}"),
+    "srtPublicPort": $(decimal_or_null "${SRT_PUBLIC_PORT}"),
     "videoRtpPort": ${VIDEO_PORT},
     "audioRtpPort": ${AUDIO_PORT},
     "videoRtcpPort": ${VIDEO_RTCP_PORT},
     "audioRtcpPort": ${AUDIO_RTCP_PORT},
-    "audioEnabled": ${input_audio_enabled}
+    "audioEnabled": ${input_audio_enabled},
+    "forwardDrops": ${forward_drops}
   },
   "processing": {
     "mode": $(json_quote "${processing_mode}"),

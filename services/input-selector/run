@@ -2,4 +2,7 @@
 # shellcheck shell=bash
 set -e
 
+# shellcheck source=scripts/load-settings.sh
+source /usr/local/bin/load-settings.sh
+
 exec s6-setuidgid player /usr/local/bin/input-selector

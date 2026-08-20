@@ -22,6 +22,7 @@ AUDIO_PORT="${SRT_RELAY_AUDIO_PORT:-15005}"
 VIDEO_RTCP_PORT="${SRT_RELAY_VIDEO_RTCP_PORT:-15006}"
 AUDIO_RTCP_PORT="${SRT_RELAY_AUDIO_RTCP_PORT:-15007}"
 VIDEO_BITRATE="${VIDEO_BITRATE:-6M}"
+VIDEO_BUFFER_SIZE="${VIDEO_BUFFER_SIZE:-2M}"
 VIDEO_PRESET="${VIDEO_PRESET:-veryfast}"
 AUDIO_BITRATE="${AUDIO_BITRATE:-128k}"
 VIDEO_MAP="${VIDEO_MAP:-0:v:0}"
@@ -38,6 +39,7 @@ PROGRESS_FIFO=/run/webrtc-player/ffmpeg-progress
 [[ "${SRT_COLOR_MODE}" == "auto" || "${SRT_COLOR_MODE}" == "fast" || "${SRT_COLOR_MODE}" == "hdr-to-sdr" ]] \
     || fail "SRT_COLOR_MODE must be auto, fast, or hdr-to-sdr"
 [[ "${VIDEO_BITRATE}" =~ ^[1-9][0-9]*([kK]|M)?$ ]] || fail "VIDEO_BITRATE must be positive with an optional k, K, or M suffix"
+[[ "${VIDEO_BUFFER_SIZE}" =~ ^[1-9][0-9]*([kK]|M)?$ ]] || fail "VIDEO_BUFFER_SIZE must be positive with an optional k, K, or M suffix"
 [[ "${AUDIO_BITRATE}" =~ ^[1-9][0-9]*([kK]|M)?$ ]] || fail "AUDIO_BITRATE must be positive with an optional k, K, or M suffix"
 [[ "${MAX_WIDTH}" =~ ^[0-9]+$ && "${MAX_HEIGHT}" =~ ^[0-9]+$ && "${MAX_FPS}" =~ ^[0-9]+$ ]] \
     || fail "MAX_WIDTH, MAX_HEIGHT, and MAX_FPS must be integers"
@@ -94,6 +96,7 @@ ffmpeg_args=(
     -flags low_delay
     -probesize "${PROBE_SIZE:-10M}"
     -analyzeduration "${ANALYZE_DURATION_US:-5000000}"
+    -thread_queue_size 4096
     "${input_options[@]}"
     -i "${SRT_URL}"
     -map "${VIDEO_MAP}"
@@ -105,7 +108,7 @@ ffmpeg_args=(
     -level:v 4.2
     -b:v "${VIDEO_BITRATE}"
     -maxrate "${VIDEO_BITRATE}"
-    -bufsize "${VIDEO_BITRATE}"
+    -bufsize "${VIDEO_BUFFER_SIZE}"
     -g 120
     -keyint_min 1
     -sc_threshold 0

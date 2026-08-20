@@ -37,7 +37,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  button, video { font: inherit; }
+  button, input, select, summary, video { font: inherit; }
+  button { color: inherit; }
 
   .shell {
     width: min(1480px, 100%);
@@ -77,6 +78,24 @@
   .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
 
   .topbar-status { display: flex; align-items: center; gap: 12px; }
+
+  .setup-button, .secondary-button, .primary-button, .copy-button, .icon-button {
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    color: var(--text);
+    background: var(--panel-raised);
+    cursor: pointer;
+    transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  }
+
+  .setup-button:hover, .secondary-button:hover, .copy-button:hover, .icon-button:hover {
+    border-color: #496064;
+    background: #202e31;
+  }
+
+  .setup-button:active, .secondary-button:active, .primary-button:active, .copy-button:active { transform: translateY(1px); }
+  .setup-button { min-height: 34px; padding: 0 13px; font-size: 12px; font-weight: 680; }
+  button:disabled { cursor: wait; opacity: 0.55; }
 
   .updated {
     color: var(--quiet);
@@ -312,6 +331,114 @@
   .system-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; color: var(--quiet); font-size: 10px; }
   .system-meta span { white-space: nowrap; }
 
+  .connection-card { margin-top: 18px; }
+
+  .connection-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .connection-group { padding: 18px; }
+  .connection-group + .connection-group { border-left: 1px solid var(--line-soft); }
+  .connection-group h3 { margin: 0 0 5px; font-size: 13px; }
+  .connection-group > p { margin: 0 0 14px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  .endpoint {
+    display: grid;
+    grid-template-columns: 82px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 52px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  .endpoint-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .endpoint-value { min-width: 0; }
+  .endpoint-value code { display: block; overflow: hidden; color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .endpoint-value small { display: block; margin-top: 3px; color: var(--quiet); font-size: 10px; }
+  .copy-button { min-height: 28px; padding: 0 9px; color: var(--muted); font-size: 10px; }
+
+  dialog {
+    width: min(720px, calc(100% - 28px));
+    max-height: min(860px, calc(100vh - 28px));
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    color: var(--text);
+    background: #121a1c;
+    box-shadow: 0 30px 100px rgba(0, 0, 0, 0.58);
+  }
+
+  dialog::backdrop { background: rgba(3, 6, 7, 0.74); backdrop-filter: blur(5px); }
+  .setup-form { display: flex; max-height: min(860px, calc(100vh - 28px)); flex-direction: column; }
+
+  .dialog-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 20px 22px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .dialog-head h2 { margin: 0; font-size: 18px; }
+  .dialog-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
+  .icon-button { width: 34px; height: 34px; color: var(--muted); font-size: 18px; }
+  .dialog-body { overflow-y: auto; padding: 6px 22px 20px; }
+
+  .form-section { padding: 20px 0 5px; }
+  .form-section + .form-section { border-top: 1px solid var(--line-soft); }
+  .form-section-head { margin-bottom: 15px; }
+  .form-section-head h3 { margin: 0; font-size: 13px; }
+  .form-section-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-field.full { grid-column: 1 / -1; }
+  .form-field label, .check-field > span:first-child { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+
+  .form-field input, .form-field select {
+    width: 100%;
+    min-height: 40px;
+    padding: 0 11px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    outline: none;
+    color: var(--text);
+    background: #0d1416;
+    font-size: 12px;
+  }
+
+  .form-field input:focus, .form-field select:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(131, 217, 223, 0.09); }
+  .field-help { margin: 6px 0 0; color: var(--quiet); font-size: 10px; line-height: 1.4; }
+
+  .check-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; grid-column: 1 / -1; }
+  .check-field { display: flex; align-items: center; justify-content: space-between; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 10px; background: rgba(255, 255, 255, 0.015); }
+  .check-field > span:first-child { margin: 0; letter-spacing: 0; text-transform: none; }
+  .check-field input { width: 17px; height: 17px; accent-color: var(--cyan); }
+
+  details.advanced { margin-top: 17px; border-top: 1px solid var(--line-soft); }
+  details.advanced summary { padding: 16px 0 0; color: var(--muted); cursor: pointer; font-size: 11px; font-weight: 650; }
+  details.advanced .form-grid { padding-top: 15px; }
+
+  .dialog-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 15px 22px;
+    border-top: 1px solid var(--line-soft);
+    background: #101719;
+  }
+
+  .save-status { min-height: 16px; color: var(--muted); font-size: 11px; }
+  .save-status.error { color: var(--red); }
+  .save-status.success { color: var(--green); }
+  .dialog-actions { display: flex; gap: 9px; }
+  .secondary-button, .primary-button { min-height: 36px; padding: 0 14px; font-size: 11px; font-weight: 680; }
+  .primary-button { border-color: var(--cyan); color: #071113; background: var(--cyan); }
+  .primary-button:hover { background: #a2e6eb; }
+
   @media (max-width: 980px) {
     .hero { grid-template-columns: 1fr; }
     .signal-path { grid-template-columns: repeat(3, 1fr); grid-template-rows: auto; gap: 16px; }
@@ -320,12 +447,16 @@
     .step-state { grid-column: 2; }
     .details { grid-template-columns: 1fr 1fr; }
     .details .card:last-child { grid-column: 1 / -1; }
+    .connection-grid { grid-template-columns: 1fr; }
+    .connection-group + .connection-group { border-top: 1px solid var(--line-soft); border-left: 0; }
   }
 
   @media (max-width: 650px) {
     .shell { padding-top: 18px; }
     .topbar { align-items: flex-start; }
     .updated { display: none; }
+    .topbar-status { gap: 7px; }
+    .setup-button { padding: 0 10px; }
     .hero, .details { gap: 12px; }
     .video-stage { min-height: 190px; }
     .signal-path { grid-template-columns: 1fr; gap: 0; }
@@ -337,6 +468,11 @@
     .system-bar { align-items: flex-start; flex-direction: column; }
     .system-meta { justify-content: flex-start; }
     .preview-note { display: none; }
+    .endpoint { grid-template-columns: 66px minmax(0, 1fr) auto; gap: 8px; }
+    .form-grid, .check-row { grid-template-columns: 1fr; }
+    .form-field.full, .check-row { grid-column: auto; }
+    .dialog-foot { align-items: stretch; flex-direction: column; }
+    .dialog-actions { justify-content: flex-end; }
   }
 </style>
 </head>
@@ -352,6 +488,7 @@
     </div>
     <div class="topbar-status">
       <span class="updated" id="lastUpdated">Waiting for status</span>
+      <button class="setup-button" id="setupButton" type="button">Setup</button>
       <span class="badge" id="systemBadge">Checking system</span>
     </div>
   </header>
@@ -438,9 +575,9 @@
         </header>
         <dl class="metric-list">
           <div class="metric"><dt>Pipeline</dt><dd id="pipelineMode">--</dd></div>
-          <div class="metric"><dt>Encode rate</dt><dd class="accent" id="encodeFps">--</dd></div>
+          <div class="metric"><dt>Output cadence</dt><dd class="accent" id="encodeFps">--</dd></div>
           <div class="metric"><dt>Media speed</dt><dd id="mediaSpeed">--</dd></div>
-          <div class="metric"><dt>Encoded bitrate</dt><dd id="encodedBitrate">--</dd></div>
+          <div class="metric"><dt>Media bitrate</dt><dd id="encodedBitrate">--</dd></div>
           <div class="metric"><dt>App CPU / memory</dt><dd id="appResources">--</dd></div>
         </dl>
       </article>
@@ -456,10 +593,60 @@
           <div class="metric"><dt>Video</dt><dd class="accent" id="videoOutput">--</dd></div>
           <div class="metric"><dt>Video codec</dt><dd id="videoCodec">--</dd></div>
           <div class="metric"><dt>Audio</dt><dd id="audioOutput">--</dd></div>
-          <div class="metric"><dt>Loss / jitter</dt><dd id="networkQuality">--</dd></div>
+          <div class="metric"><dt>Packet loss / jitter</dt><dd id="networkQuality">--</dd></div>
+          <div class="metric"><dt>Decoded / dropped frames</dt><dd id="frameQuality">--</dd></div>
           <div class="metric"><dt>Selected path</dt><dd class="mono" id="networkPath">--</dd></div>
         </dl>
       </article>
+    </section>
+
+    <section class="card connection-card" aria-label="Connection guide">
+      <header class="card-head">
+        <div>
+          <p class="eyebrow">Setup reference</p>
+          <h2 class="card-title">Connect to this instance</h2>
+        </div>
+      </header>
+      <div class="connection-grid">
+        <section class="connection-group">
+          <h3>Send media in</h3>
+          <p>Use one supported input. Automatic mode selects the first valid source.</p>
+          <div class="endpoint">
+            <span class="endpoint-label">SRT</span>
+            <span class="endpoint-value"><code id="srtConnectValue">--</code><small id="srtConnectHint">MPEG-TS caller</small></span>
+            <button class="copy-button" type="button" data-copy="srtConnectValue">Copy</button>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-label">Video RTP</span>
+            <span class="endpoint-value"><code id="videoRtpConnectValue">--</code><small>H.264 · PT 96</small></span>
+            <button class="copy-button" type="button" data-copy="videoRtpConnectValue">Copy</button>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-label">Audio RTP</span>
+            <span class="endpoint-value"><code id="audioRtpConnectValue">--</code><small>Opus stereo · PT 111</small></span>
+            <button class="copy-button" type="button" data-copy="audioRtpConnectValue">Copy</button>
+          </div>
+        </section>
+        <section class="connection-group">
+          <h3>View WebRTC out</h3>
+          <p>The player URL and embed code follow the active stream ID.</p>
+          <div class="endpoint">
+            <span class="endpoint-label">Player</span>
+            <span class="endpoint-value"><code id="playerConnectValue">--</code><small>WebRTC monitor and player</small></span>
+            <button class="copy-button" type="button" data-copy="playerConnectValue">Copy</button>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-label">Embed</span>
+            <span class="endpoint-value"><code id="embedConnectValue">--</code><small>Responsive iframe example</small></span>
+            <button class="copy-button" type="button" data-copy="embedConnectValue">Copy</button>
+          </div>
+          <div class="endpoint">
+            <span class="endpoint-label">WebSocket</span>
+            <span class="endpoint-value"><code id="websocketConnectValue">--</code><small>Janus WebRTC signaling</small></span>
+            <button class="copy-button" type="button" data-copy="websocketConnectValue">Copy</button>
+          </div>
+        </section>
+      </div>
     </section>
 
     <footer class="card system-bar" aria-label="Service status">
@@ -479,11 +666,131 @@
   </main>
 </div>
 
+<dialog id="setupDialog">
+  <form class="setup-form" id="setupForm">
+    <header class="dialog-head">
+      <div>
+        <h2>Input and output setup</h2>
+        <p>Settings persist across container restarts. Applying briefly restarts the media path.</p>
+      </div>
+      <button class="icon-button" id="closeSetupButton" type="button" aria-label="Close setup">&times;</button>
+    </header>
+    <div class="dialog-body">
+      <section class="form-section">
+        <div class="form-section-head">
+          <h3>Input</h3>
+          <p>Automatic mode accepts supported RTP and SRT and selects the first active source.</p>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="configInputMode">Accepted inputs</label>
+            <select id="configInputMode" name="INPUT_MODE">
+              <option value="auto">Automatic RTP + SRT</option>
+              <option value="srt">SRT only</option>
+              <option value="rtp">Direct RTP only</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="configInputTimeout">Release timeout</label>
+            <input id="configInputTimeout" name="INPUT_TIMEOUT_MS" type="number" min="1000" max="60000" step="500" required>
+            <p class="field-help">Milliseconds without video before another source can be selected.</p>
+          </div>
+          <div class="form-field full">
+            <label for="configSrtUrl">SRT listener or caller URL</label>
+            <input id="configSrtUrl" name="SRT_URL" type="text" spellcheck="false" required>
+            <p class="field-help">Use mode=listener to receive a caller, or mode=caller with the remote source address.</p>
+          </div>
+          <div class="check-row">
+            <label class="check-field"><span>Expect audio in SRT</span><input id="configSrtAudio" name="SRT_AUDIO" type="checkbox"></label>
+            <label class="check-field"><span>Enable audio in direct RTP</span><input id="configAudioEnabled" name="AUDIO_ENABLED" type="checkbox"></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-head">
+          <h3>WebRTC output</h3>
+          <p>The protocol and ICE port range remain fixed; these settings control the advertised stream.</p>
+        </div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="configStreamId">Stream ID</label>
+            <input id="configStreamId" name="STREAM_ID" type="number" min="1" max="2147483647" required>
+          </div>
+          <div class="form-field">
+            <label for="configPublicIp">Public IP</label>
+            <input id="configPublicIp" name="PUBLIC_IP" type="text" placeholder="Automatic / local" spellcheck="false">
+            <p class="field-help">Set only when browsers reach Janus through one-to-one NAT.</p>
+          </div>
+        </div>
+      </section>
+
+      <details class="advanced">
+        <summary>Processing and encryption</summary>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="configVideoPreset">x264 preset</label>
+            <select id="configVideoPreset" name="VIDEO_PRESET">
+              <option>ultrafast</option><option>superfast</option><option>veryfast</option><option>faster</option><option>fast</option><option>medium</option><option>slow</option><option>slower</option><option>veryslow</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="configColorMode">Color handling</label>
+            <select id="configColorMode" name="SRT_COLOR_MODE">
+              <option value="auto">Automatic / fast conversion</option>
+              <option value="fast">Known SDR</option>
+              <option value="hdr-to-sdr">HDR to SDR tone mapping</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label for="configVideoBitrate">Video bitrate</label>
+            <input id="configVideoBitrate" name="VIDEO_BITRATE" type="text" required>
+          </div>
+          <div class="form-field">
+            <label for="configAudioBitrate">Audio bitrate</label>
+            <input id="configAudioBitrate" name="AUDIO_BITRATE" type="text" required>
+          </div>
+          <div class="form-field">
+            <label for="configMaxWidth">Maximum width</label>
+            <input id="configMaxWidth" name="MAX_WIDTH" type="number" min="16" max="8192" required>
+          </div>
+          <div class="form-field">
+            <label for="configMaxHeight">Maximum height</label>
+            <input id="configMaxHeight" name="MAX_HEIGHT" type="number" min="16" max="8192" required>
+          </div>
+          <div class="form-field">
+            <label for="configMaxFps">Maximum FPS</label>
+            <input id="configMaxFps" name="MAX_FPS" type="number" min="1" max="60" required>
+          </div>
+          <div class="form-field">
+            <label for="configPbkeylen">SRT encryption strength</label>
+            <select id="configPbkeylen" name="SRT_PBKEYLEN"><option value="16">AES-128</option><option value="24">AES-192</option><option value="32">AES-256</option></select>
+          </div>
+          <div class="form-field full">
+            <label for="configPassphrase">SRT passphrase</label>
+            <input id="configPassphrase" name="SRT_PASSPHRASE" type="password" minlength="10" maxlength="79" autocomplete="new-password" placeholder="Leave blank to keep the current passphrase">
+            <p class="field-help" id="passphraseHelp">No saved passphrase. Enter 10-79 characters to enable encryption.</p>
+          </div>
+          <label class="check-field form-field full"><span>Clear saved SRT passphrase</span><input id="clearPassphrase" type="checkbox"></label>
+        </div>
+      </details>
+    </div>
+    <footer class="dialog-foot">
+      <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
+      <div class="dialog-actions">
+        <button class="secondary-button" id="cancelSetupButton" type="button">Cancel</button>
+        <button class="primary-button" id="saveSetupButton" type="submit">Apply settings</button>
+      </div>
+    </footer>
+  </form>
+</dialog>
+
 <script>
 (function() {
   "use strict";
 
   var params = new URLSearchParams(window.location.search);
+  var followConfiguredStream = !params.has("stream");
   var streamId = parseInt(params.get("stream") || "1", 10);
   if (!Number.isSafeInteger(streamId) || streamId < 1) streamId = 1;
   var wsUrl = params.get("ws") || ((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
@@ -584,6 +891,13 @@
     byId("systemBadge").textContent = healthy ? "System online" : "Service issue";
     setText("lastUpdated", "Updated " + new Date(status.timestamp * 1000).toLocaleTimeString());
     setText("streamLabel", "STREAM " + String(output.streamId).padStart(2, "0"));
+    if (followConfiguredStream && streamId !== output.streamId) {
+      streamId = output.streamId;
+      if (ws) {
+        cleanupConnection();
+        setTimeout(connect, 0);
+      }
+    }
 
     setText("inputSummary", isSrt ? "SRT contribution" : isRtp ? "Direct RTP" : "Automatic input");
     setText("inputSummaryDetail", selectedSource === "none" ? "Listening for supported RTP and SRT" : input.transport + " · selected automatically");
@@ -609,7 +923,7 @@
     setText("audioInputPorts", input.acceptsRtp && input.audioEnabled ? input.audioRtpPort + " / " + input.audioRtcpPort : "Disabled");
     setText("inputDetailState", inputState.label);
 
-    setText("pipelineMode", isSrt ? "Transcode" : isRtp ? "Passthrough" : "Standby");
+    setText("pipelineMode", isSrt ? "Transcode" : isRtp ? "RTP passthrough" : "Standby");
     setText("encodeFps", processing.active && processing.fps !== null ? Number(processing.fps).toFixed(1) + " fps" : "--");
     setText("mediaSpeed", processing.active ? processing.speed : "--");
     setText("encodedBitrate", processing.active ? processing.bitrate : "--");
@@ -623,6 +937,135 @@
     setText("icePorts", "ICE " + output.icePortStart + "-" + output.icePortEnd + "/UDP");
     setText("systemLoad", "Load " + Number(status.system.loadAverage1m).toFixed(2) + " · " + status.system.cpuCores + " cores");
     setText("systemUptime", "Uptime " + formatDuration(status.uptimeSeconds));
+    renderConnectionGuide(status);
+  }
+
+  function connectionHost() {
+    var host = location.hostname || "localhost";
+    return host.indexOf(":") >= 0 && host.charAt(0) !== "[" ? "[" + host + "]" : host;
+  }
+
+  function renderConnectionGuide(status) {
+    var host = connectionHost();
+    var input = status.input;
+    var output = status.output;
+    var playerUrl = location.origin + "/?stream=" + output.streamId;
+    var srtUrl;
+
+    if (input.role === "caller" && input.address && input.port) {
+      srtUrl = "srt://" + input.address + ":" + input.port + "?mode=listener";
+      setText("srtConnectHint", "Run a listener at the configured remote source");
+    } else {
+      srtUrl = "srt://" + host + ":" + (input.srtPublicPort || input.srtPort || 9000) + "?mode=caller&latency=120000";
+      setText("srtConnectHint", input.acceptsSrt ? "MPEG-TS caller" : "Disabled in the current input mode");
+    }
+    setText("srtConnectValue", srtUrl);
+    setText("videoRtpConnectValue", "rtp://" + host + ":" + input.videoRtpPort);
+    setText("audioRtpConnectValue", "rtp://" + host + ":" + input.audioRtpPort);
+    setText("playerConnectValue", playerUrl);
+    setText("embedConnectValue", '<iframe src="' + playerUrl + '" allow="autoplay" style="width:100%;aspect-ratio:16/9;border:0"></iframe>');
+    setText("websocketConnectValue", wsUrl);
+  }
+
+  async function copyEndpoint(button) {
+    var target = byId(button.dataset.copy);
+    if (!target || target.textContent === "--") return;
+    try {
+      await navigator.clipboard.writeText(target.textContent);
+      var previous = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(function() { button.textContent = previous; }, 1200);
+    } catch (error) {
+      log("Clipboard unavailable", error);
+    }
+  }
+
+  function configControl(name) {
+    return document.querySelector('[name="' + name + '"]');
+  }
+
+  function populateConfig(config) {
+    Object.keys(config.values).forEach(function(name) {
+      var control = configControl(name);
+      if (!control) return;
+      if (control.type === "checkbox") control.checked = config.values[name] === "true";
+      else control.value = config.values[name];
+    });
+    byId("configPassphrase").value = "";
+    byId("configPassphrase").disabled = false;
+    byId("clearPassphrase").checked = false;
+    setText("passphraseHelp", config.passphraseConfigured ? "A passphrase is saved. Leave blank to keep it." : "No saved passphrase. Enter 10-79 characters to enable encryption.");
+  }
+
+  async function fetchConfig() {
+    var response = await fetch("/api/config", { cache: "no-store" });
+    var result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Configuration is unavailable");
+    populateConfig(result);
+  }
+
+  async function openSetup() {
+    var dialog = byId("setupDialog");
+    setText("saveStatus", "Loading settings...");
+    byId("saveStatus").className = "save-status";
+    dialog.showModal();
+    try {
+      await fetchConfig();
+      byId("saveStatus").textContent = "";
+    } catch (error) {
+      byId("saveStatus").className = "save-status error";
+      setText("saveStatus", error.message);
+    }
+  }
+
+  function closeSetup() { byId("setupDialog").close(); }
+
+  async function saveSetup(event) {
+    event.preventDefault();
+    var form = byId("setupForm");
+    if (!form.reportValidity()) return;
+    var saveButton = byId("saveSetupButton");
+    var body = new URLSearchParams();
+    var names = ["INPUT_MODE", "SRT_URL", "SRT_COLOR_MODE", "VIDEO_PRESET", "VIDEO_BITRATE", "AUDIO_BITRATE", "MAX_WIDTH", "MAX_HEIGHT", "MAX_FPS", "INPUT_TIMEOUT_MS", "STREAM_ID", "PUBLIC_IP", "SRT_PBKEYLEN"];
+    names.forEach(function(name) { body.set(name, configControl(name).value.trim()); });
+    body.set("SRT_AUDIO", byId("configSrtAudio").checked ? "true" : "false");
+    body.set("AUDIO_ENABLED", byId("configAudioEnabled").checked ? "true" : "false");
+    var passphrase = byId("configPassphrase").value;
+    body.set("SRT_PASSPHRASE", passphrase);
+    body.set("passphraseAction", byId("clearPassphrase").checked ? "clear" : passphrase ? "set" : "keep");
+
+    saveButton.disabled = true;
+    byId("saveStatus").className = "save-status";
+    setText("saveStatus", "Applying settings and restarting media services...");
+    try {
+      var response = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "X-Requested-With": "WebRTC-Player" },
+        body: body.toString()
+      });
+      var result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Settings could not be applied");
+      byId("saveStatus").className = "save-status success";
+      setText("saveStatus", "Settings applied");
+      streamId = parseInt(body.get("STREAM_ID"), 10);
+      if (!followConfiguredStream) {
+        params.set("stream", String(streamId));
+        history.replaceState(null, "", location.pathname + "?" + params.toString());
+      }
+      await fetchConfig();
+      setTimeout(function() {
+        closeSetup();
+        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+        cleanupConnection();
+        connect();
+        fetchStatus();
+      }, 650);
+    } catch (error) {
+      byId("saveStatus").className = "save-status error";
+      setText("saveStatus", error.message);
+    } finally {
+      saveButton.disabled = false;
+    }
   }
 
   async function fetchStatus() {
@@ -788,17 +1231,28 @@
         }
       });
 
-      function sampleBitrate(report) {
-        if (!report || !Number.isFinite(report.bytesReceived)) return null;
+      function sampleInbound(report) {
+        if (!report || !Number.isFinite(report.bytesReceived)) return { bitrate: null, lost: null, received: null };
         var previous = previousRtc[report.id];
-        previousRtc[report.id] = { bytes: report.bytesReceived, timestamp: report.timestamp };
-        if (!previous || report.timestamp <= previous.timestamp) return null;
+        previousRtc[report.id] = {
+          bytes: report.bytesReceived,
+          timestamp: report.timestamp,
+          packetsLost: report.packetsLost || 0,
+          packetsReceived: report.packetsReceived || 0
+        };
+        if (!previous || report.timestamp <= previous.timestamp) return { bitrate: null, lost: null, received: null };
         var bits = (report.bytesReceived - previous.bytes) * 8;
-        return bits * 1000 / (report.timestamp - previous.timestamp);
+        return {
+          bitrate: bits * 1000 / (report.timestamp - previous.timestamp),
+          lost: Math.max(0, (report.packetsLost || 0) - previous.packetsLost),
+          received: Math.max(0, (report.packetsReceived || 0) - previous.packetsReceived)
+        };
       }
 
-      var videoBitrate = sampleBitrate(videoInbound);
-      var audioBitrate = sampleBitrate(audioInbound);
+      var videoSample = sampleInbound(videoInbound);
+      var audioSample = sampleInbound(audioInbound);
+      var videoBitrate = videoSample.bitrate;
+      var audioBitrate = audioSample.bitrate;
       if ((videoBitrate || 0) + (audioBitrate || 0) > 0) lastMediaAt = Date.now();
       var receiving = Date.now() - lastMediaAt < 3000;
 
@@ -811,9 +1265,18 @@
       }
 
       setText("audioOutput", audioInbound ? formatBitrate(audioBitrate) : (latestStatus && !latestStatus.input.audioEnabled ? "Disabled" : "--"));
-      var lost = (videoInbound ? videoInbound.packetsLost || 0 : 0) + (audioInbound ? audioInbound.packetsLost || 0 : 0);
+      var intervalLost = (videoSample.lost || 0) + (audioSample.lost || 0);
+      var intervalReceived = (videoSample.received || 0) + (audioSample.received || 0);
+      var intervalPackets = intervalLost + intervalReceived;
+      var cumulativeLost = (videoInbound ? videoInbound.packetsLost || 0 : 0) + (audioInbound ? audioInbound.packetsLost || 0 : 0);
       var jitter = Math.max(videoInbound ? videoInbound.jitter || 0 : 0, audioInbound ? audioInbound.jitter || 0 : 0) * 1000;
-      setText("networkQuality", lost + " lost · " + jitter.toFixed(1) + " ms");
+      setText("networkQuality", intervalPackets ? (intervalLost * 100 / intervalPackets).toFixed(2) + "% · " + jitter.toFixed(1) + " ms" : "Collecting · " + jitter.toFixed(1) + " ms");
+      byId("networkQuality").title = cumulativeLost + " cumulative RTP packets reported lost in this WebRTC session";
+      if (videoInbound) {
+        var decodedFrames = videoInbound.framesDecoded || 0;
+        var droppedFrames = videoInbound.framesDropped || 0;
+        setText("frameQuality", decodedFrames.toLocaleString() + " / " + droppedFrames.toLocaleString());
+      }
 
       if (selectedPair) {
         var local = reportMap.get(selectedPair.localCandidateId);
@@ -843,8 +1306,21 @@
     setText("videoCodec", "--");
     setText("audioOutput", "--");
     setText("networkQuality", "--");
+    setText("frameQuality", "--");
     setText("networkPath", "--");
   }
+
+  byId("setupButton").addEventListener("click", openSetup);
+  byId("closeSetupButton").addEventListener("click", closeSetup);
+  byId("cancelSetupButton").addEventListener("click", closeSetup);
+  byId("setupForm").addEventListener("submit", saveSetup);
+  byId("clearPassphrase").addEventListener("change", function() {
+    byId("configPassphrase").disabled = this.checked;
+    if (this.checked) byId("configPassphrase").value = "";
+  });
+  document.querySelectorAll("[data-copy]").forEach(function(button) {
+    button.addEventListener("click", function() { copyEndpoint(button); });
+  });
 
   fetchStatus();
   setInterval(fetchStatus, 2000);

@@ -56,16 +56,31 @@ Automatic mode accepts:
 
 When an SRT passphrase or passphrase file is configured, automatic mode disables unauthenticated direct RTP so it cannot bypass SRT encryption.
 
-## Monitoring UI
+## Monitoring and Setup UI
 
-The root page is a read-only signal monitor designed for both desktop and mobile. It shows only data available from the running application:
+The root page combines a responsive signal monitor with basic input/output setup. The monitor shows only data available from the running application:
 
 - Input mode, transport state, listener/caller address, and RTP/RTCP ports
-- SRT transcoder frame rate, encoded bitrate, processing speed, and application CPU/memory use
+- SRT output cadence, media bitrate, processing speed, and application CPU/memory use
 - Janus, FFmpeg, and Nginx process state plus system load and monitor uptime
-- This browser's WebRTC resolution, frame rate, video/audio receive bitrate, codec, packet loss, jitter, and selected ICE path
+- This browser's WebRTC resolution, frame rate, video/audio receive bitrate, codec, interval packet loss, decoded/dropped frames, jitter, and selected ICE path
 
-Runtime status is refreshed from `GET /api/status`; browser receive statistics come directly from `RTCPeerConnection.getStats()`. Direct RTP input bitrate and sender details are not displayed because Janus does not currently expose those values to the monitor. The page intentionally has no configuration or administrative controls.
+Runtime status is refreshed from `GET /api/status`; browser receive statistics come directly from `RTCPeerConnection.getStats()`. Direct RTP input bitrate and sender details are not displayed because Janus does not currently expose those values to the monitor.
+
+Select **Setup** to configure the supported runtime settings:
+
+- Automatic, RTP-only, or SRT-only input acceptance and source timeout
+- SRT listener/caller URL, expected audio, color handling, and optional encryption
+- Transcode bitrate, x264 preset, maximum dimensions, and frame rate
+- WebRTC stream ID, direct-RTP audio, and the public IP advertised by Janus
+
+Applying settings validates every value, persists them in the `player-config` Docker volume, regenerates the Janus mountpoint, and briefly restarts only the media services. The browser reconnects automatically. Persisted UI settings take precedence over matching environment variables on later container starts; use `docker compose down -v` to remove them and return to environment/default values.
+
+Published HTTP, SRT, RTP/RTCP, and ICE ports are shown but remain read-only because Docker port mappings cannot be changed safely from inside the container. The connection guide displays copy-ready SRT, RTP, player, WebSocket, and iframe values based on the host currently used to open the UI.
+
+The configuration endpoint is intentionally simple and has no user-account system. Do not expose it to untrusted networks without access control in the deployment reverse proxy.
+
+The Janus Streaming mountpoint uses two relay helper threads so its RTP receiver can keep draining bursty video packets while WebRTC forwarding runs independently. Its RTP/RTCP sockets request a 4 MiB receive buffer, and the input selector drains incoming bursts into a bounded queue before pacing video RTP toward Janus in small batches. Batched pacing avoids coarse virtual-machine timer rounding while keeping each Janus burst small, without privileged host kernel tuning.
 
 ## SRT Listener
 
@@ -105,6 +120,10 @@ docker compose up --build
 
 FFmpeg exits when an SRT connection ends; s6 restarts it with a short delay so listener and caller modes both reconnect.
 
+SRT packets are drained on a dedicated bounded FFmpeg input queue so codec initialization and transient encoder stalls do not cause transport-level packet loss.
+
+File-based test senders must pace output in real time. VLC 3's SRT stream-output module can run a file faster than its timestamps, eventually filling the SRT receive queue and causing MPEG-TS corruption even on localhost. Use a real-time encoder or an FFmpeg sender with `-re` when evaluating packet and frame loss.
+
 ## Supported SRT Media
 
 SRT is expected to carry MPEG-TS with one selected video track and, by default, one selected audio track.
@@ -117,9 +136,9 @@ Video input includes:
 - Progressive and correctly flagged interlaced content
 - SDR content by default, with an explicit HDR/HLG/PQ-to-SDR mode
 
-Common audio decoders include AAC, Opus, MP2/MP3, AC-3, E-AC-3, and PCM. Actual acceptance depends on the demuxer and decoders included in FFmpeg 9.0.1.
+All SRT video is decoded and normalized to constrained-baseline H.264 Level 4.2, 8-bit 4:2:0 at no more than 60 fps. Audio is normalized to stereo Opus at 48 kHz. This is required because HEVC is not broadly interoperable in browser WebRTC and unmodified high-bitrate H.264 keyframes can exceed the unprivileged UDP buffers between FFmpeg and Janus.
 
-All SRT video is decoded and normalized to constrained-baseline H.264 Level 4.2, 8-bit 4:2:0 at no more than 60 fps. Audio is normalized to stereo Opus at 48 kHz. This is required because HEVC is not broadly interoperable in browser WebRTC and Janus does not transcode.
+Common audio decoders include AAC, Opus, MP2/MP3, AC-3, E-AC-3, and PCM. Actual acceptance depends on the demuxer and decoders included in FFmpeg 9.0.1.
 
 The default output ceiling is 1920x1080. CPU-only HEVC-to-H.264 at 1080p60 requires a suitably provisioned modern CPU; measure the `speed=` value in FFmpeg logs on the deployment hardware. Values below `1.0x` indicate the host cannot sustain real time.
 
@@ -164,6 +183,7 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 |---|---|---|
 | `INPUT_MODE` | `auto` | Automatic RTP/SRT selection, or the `rtp`/`srt` restriction overrides |
 | `INPUT_TIMEOUT_MS` | `5000` | Video silence before automatic mode releases the selected input |
+| `RTP_PACING_US` | `100` | Minimum spacing between video RTP packets forwarded to Janus (0-2000 microseconds) |
 | `STREAM_ID` | `1` | Positive Janus mountpoint ID |
 | `VIDEO_PORT` | `5004` | Internal/direct H.264 RTP port |
 | `AUDIO_PORT` | `5005` | Internal/direct Opus RTP port |
@@ -175,6 +195,7 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 | `SRT_AUDIO` | `true` | Expect and transcode an SRT audio stream |
 | `SRT_COLOR_MODE` | `auto` | `auto`, `fast`, or `hdr-to-sdr` |
 | `VIDEO_BITRATE` | `6M` | H.264 target and maximum bitrate |
+| `VIDEO_BUFFER_SIZE` | `2M` | x264 VBV reservoir; bounds keyframe bursts before local RTP transport |
 | `VIDEO_PRESET` | `veryfast` | x264 CPU/quality preset |
 | `AUDIO_BITRATE` | `128k` | Opus bitrate |
 | `MAX_WIDTH` | `1920` | Maximum output width |

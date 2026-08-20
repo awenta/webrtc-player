@@ -2,6 +2,9 @@
 # shellcheck shell=bash
 set -Eeuo pipefail
 
+# shellcheck source=scripts/load-settings.sh
+source /usr/local/bin/load-settings.sh
+
 readonly CONFIG_DIR=/run/webrtc-player/janus
 
 fail() {
@@ -86,9 +89,16 @@ STREAM_SECRET="${STREAM_SECRET:-$(< /proc/sys/kernel/random/uuid)}"
 
 media_iface='            iface = "127.0.0.1"'
 
-install -d -o player -g player -m 0750 /run/webrtc-player "${CONFIG_DIR}"
+install -d -o player -g player -m 0750 /run/webrtc-player "${CONFIG_DIR}" /config /config/settings
+chown -R player:player /config
+chmod 0750 /config /config/settings
 if [[ "${INPUT_MODE}" != "rtp" ]]; then
-    mkfifo -m 0600 /run/webrtc-player/ffmpeg-progress
+    if [[ ! -p /run/webrtc-player/ffmpeg-progress ]]; then
+        rm -f /run/webrtc-player/ffmpeg-progress
+        mkfifo -m 0600 /run/webrtc-player/ffmpeg-progress
+    fi
+else
+    rm -f /run/webrtc-player/ffmpeg-progress
 fi
 
 if [[ -n "${PUBLIC_IP}" ]]; then
@@ -113,6 +123,7 @@ stream-${STREAM_ID}: {
     description = "Live Stream ${STREAM_ID}"
     secret = "${STREAM_SECRET}"
     collision = 1000
+    threads = 2
     media = (
         {
             type = "video"

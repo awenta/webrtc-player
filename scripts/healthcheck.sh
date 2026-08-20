@@ -1,7 +1,10 @@
 #!/bin/bash
 set -Eeuo pipefail
 
-for service in input-selector janus nginx stats; do
+# shellcheck source=scripts/load-settings.sh
+source /usr/local/bin/load-settings.sh
+
+for service in config-api config-applier input-selector janus nginx stats; do
     /package/admin/s6/command/s6-svstat -u "/run/service/${service}" >/dev/null
 done
 

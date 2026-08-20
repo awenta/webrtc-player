@@ -2,6 +2,9 @@
 # shellcheck shell=bash
 set -e
 
+# shellcheck source=scripts/load-settings.sh
+source /usr/local/bin/load-settings.sh
+
 if [[ "${INPUT_MODE:-auto}" == "rtp" ]]; then
     exec s6-pause
 fi

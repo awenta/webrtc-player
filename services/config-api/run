@@ -1,0 +1,5 @@
+#!/command/with-contenv bash
+# shellcheck shell=bash
+set -e
+
+exec s6-setuidgid player /usr/local/bin/config-api

@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -17,6 +18,8 @@
 #define MAX_INPUTS (CHANNEL_COUNT * 2)
 #define RTP_HEADER_SIZE 12
 #define REQUIRED_VIDEO_PACKETS 2
+#define OUTPUT_QUEUE_CAPACITY 16384
+#define VIDEO_PACING_BATCH 8
 
 enum source_id {
     SOURCE_NONE = 0,
@@ -42,6 +45,25 @@ struct candidate {
     uint16_t sequence;
     unsigned int consecutive;
     int64_t last_packet_ms;
+};
+
+struct queued_packet {
+    uint8_t *data;
+    size_t length;
+    enum channel_id channel;
+};
+
+struct output_queue {
+    struct queued_packet packets[OUTPUT_QUEUE_CAPACITY];
+    struct sockaddr_in outputs[CHANNEL_COUNT];
+    pthread_mutex_t mutex;
+    pthread_cond_t available;
+    size_t head;
+    size_t count;
+    uint64_t dropped;
+    long video_pacing_ns;
+    int fd;
+    bool stopping;
 };
 
 static volatile sig_atomic_t running = 1;
@@ -143,9 +165,95 @@ static bool candidate_ready(struct candidate *candidate, const uint8_t *packet, 
     return candidate->consecutive >= REQUIRED_VIDEO_PACKETS;
 }
 
+static void count_output_drop(struct output_queue *queue) {
+    pthread_mutex_lock(&queue->mutex);
+    queue->dropped++;
+    pthread_mutex_unlock(&queue->mutex);
+}
+
+static void *forward_packets(void *opaque) {
+    struct output_queue *queue = opaque;
+    unsigned int video_packets_since_pause = 0;
+
+    while (true) {
+        struct queued_packet packet;
+
+        pthread_mutex_lock(&queue->mutex);
+        while (queue->count == 0 && !queue->stopping) {
+            pthread_cond_wait(&queue->available, &queue->mutex);
+        }
+        if (queue->count == 0 && queue->stopping) {
+            pthread_mutex_unlock(&queue->mutex);
+            break;
+        }
+        packet = queue->packets[queue->head];
+        queue->head = (queue->head + 1) % OUTPUT_QUEUE_CAPACITY;
+        queue->count--;
+        pthread_mutex_unlock(&queue->mutex);
+
+        if (sendto(queue->fd, packet.data, packet.length, MSG_DONTWAIT,
+                (const struct sockaddr *)&queue->outputs[packet.channel], sizeof(queue->outputs[0])) < 0) {
+            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOBUFS) {
+                fprintf(stderr, "[input-selector] forward failed: %s\n", strerror(errno));
+            }
+            count_output_drop(queue);
+        }
+        free(packet.data);
+
+        if (packet.channel == VIDEO_RTP && queue->video_pacing_ns > 0 &&
+                ++video_packets_since_pause == VIDEO_PACING_BATCH) {
+            long pause_ns = queue->video_pacing_ns * VIDEO_PACING_BATCH;
+            const struct timespec delay = {
+                .tv_sec = pause_ns / 1000000000L,
+                .tv_nsec = pause_ns % 1000000000L,
+            };
+            (void)nanosleep(&delay, NULL);
+            video_packets_since_pause = 0;
+        }
+    }
+    return NULL;
+}
+
+static void enqueue_packet(struct output_queue *queue, enum channel_id channel,
+        const uint8_t *data, size_t length) {
+    uint8_t *copy = malloc(length);
+
+    if (copy == NULL) {
+        count_output_drop(queue);
+        return;
+    }
+    memcpy(copy, data, length);
+
+    pthread_mutex_lock(&queue->mutex);
+    if (queue->count == OUTPUT_QUEUE_CAPACITY) {
+        queue->dropped++;
+        pthread_mutex_unlock(&queue->mutex);
+        free(copy);
+        return;
+    }
+    size_t tail = (queue->head + queue->count) % OUTPUT_QUEUE_CAPACITY;
+    queue->packets[tail] = (struct queued_packet){
+        .data = copy,
+        .length = length,
+        .channel = channel,
+    };
+    queue->count++;
+    pthread_cond_signal(&queue->available);
+    pthread_mutex_unlock(&queue->mutex);
+}
+
+static uint64_t output_drop_count(struct output_queue *queue) {
+    uint64_t dropped;
+
+    pthread_mutex_lock(&queue->mutex);
+    dropped = queue->dropped;
+    pthread_mutex_unlock(&queue->mutex);
+    return dropped;
+}
+
 static void write_status(const char *status_path, enum source_id active_source, bool direct_enabled,
         bool srt_enabled, uint64_t direct_packets, uint64_t srt_packets, uint64_t switches,
-        const char *remote_address, unsigned int remote_port, int64_t updated_ms) {
+        uint64_t forward_drops, const char *remote_address, unsigned int remote_port, int64_t updated_ms) {
     char temporary_path[512];
     FILE *status;
 
@@ -160,12 +268,14 @@ static void write_status(const char *status_path, enum source_id active_source, 
         return;
     }
     fprintf(status,
-            "version=1\nsource=%s\ndirect_enabled=%s\nsrt_enabled=%s\n"
-            "direct_packets=%llu\nsrt_packets=%llu\nswitches=%llu\n"
-            "remote_address=%s\nremote_port=%u\nupdated_ms=%lld\n",
+             "version=1\nsource=%s\ndirect_enabled=%s\nsrt_enabled=%s\n"
+             "direct_packets=%llu\nsrt_packets=%llu\nswitches=%llu\n"
+             "forward_drops=%llu\n"
+             "remote_address=%s\nremote_port=%u\nupdated_ms=%lld\n",
             source_name(active_source), direct_enabled ? "true" : "false", srt_enabled ? "true" : "false",
-            (unsigned long long)direct_packets, (unsigned long long)srt_packets,
-            (unsigned long long)switches, remote_address, remote_port, (long long)updated_ms);
+             (unsigned long long)direct_packets, (unsigned long long)srt_packets,
+             (unsigned long long)switches, (unsigned long long)forward_drops,
+             remote_address, remote_port, (long long)updated_ms);
     if (fclose(status) != 0 || rename(temporary_path, status_path) != 0) {
         fprintf(stderr, "[input-selector] cannot publish status: %s\n", strerror(errno));
         (void)unlink(temporary_path);
@@ -198,9 +308,14 @@ int main(void) {
         read_number("JANUS_AUDIO_RTCP_PORT", 25007, 1024, 65535),
     };
     int timeout_ms = read_number("INPUT_TIMEOUT_MS", 5000, 1000, 60000);
+    int video_pacing_us = read_number("RTP_PACING_US", 100, 0, 2000);
     struct input_socket inputs[MAX_INPUTS];
     struct pollfd poll_descriptors[MAX_INPUTS];
-    struct sockaddr_in outputs[CHANNEL_COUNT];
+    struct output_queue output_queue = {
+        .mutex = PTHREAD_MUTEX_INITIALIZER,
+        .available = PTHREAD_COND_INITIALIZER,
+    };
+    pthread_t output_thread;
     struct candidate candidates[3] = {0};
     size_t input_count = 0;
     int output_fd;
@@ -229,9 +344,9 @@ int main(void) {
     }
 
     for (size_t channel = 0; channel < CHANNEL_COUNT; channel++) {
-        outputs[channel].sin_family = AF_INET;
-        outputs[channel].sin_port = htons((uint16_t)janus_ports[channel]);
-        outputs[channel].sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        output_queue.outputs[channel].sin_family = AF_INET;
+        output_queue.outputs[channel].sin_port = htons((uint16_t)janus_ports[channel]);
+        output_queue.outputs[channel].sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         if (direct_enabled) {
             inputs[input_count] = (struct input_socket){
                 .fd = bind_input(direct_ports[channel], false),
@@ -255,6 +370,13 @@ int main(void) {
         perror("[input-selector] output socket");
         return EXIT_FAILURE;
     }
+    output_queue.fd = output_fd;
+    output_queue.video_pacing_ns = (long)video_pacing_us * 1000;
+    if (pthread_create(&output_thread, NULL, forward_packets, &output_queue) != 0) {
+        fprintf(stderr, "[input-selector] cannot start forwarding thread\n");
+        close(output_fd);
+        return EXIT_FAILURE;
+    }
     for (size_t index = 0; index < input_count; index++) {
         poll_descriptors[index].fd = inputs[index].fd;
         poll_descriptors[index].events = POLLIN;
@@ -263,8 +385,9 @@ int main(void) {
     signal(SIGINT, stop_running);
     signal(SIGTERM, stop_running);
     setvbuf(stdout, NULL, _IOLBF, 0);
-    printf("[input-selector] ready: direct-rtp=%s srt=%s timeout=%dms\n",
-            direct_enabled ? "enabled" : "disabled", srt_enabled ? "enabled" : "disabled", timeout_ms);
+    printf("[input-selector] ready: direct-rtp=%s srt=%s timeout=%dms pacing=%dus/%d packets\n",
+            direct_enabled ? "enabled" : "disabled", srt_enabled ? "enabled" : "disabled",
+            timeout_ms, video_pacing_us, VIDEO_PACING_BATCH);
 
     while (running) {
         int ready = poll(poll_descriptors, input_count, 250);
@@ -284,64 +407,61 @@ int main(void) {
         }
 
         for (size_t index = 0; ready > 0 && index < input_count; index++) {
-            struct sockaddr_in sender;
-            socklen_t sender_length = sizeof(sender);
-            ssize_t length;
-            bool valid;
-
             if ((poll_descriptors[index].revents & POLLIN) == 0) {
                 continue;
             }
             ready--;
-            length = recvfrom(inputs[index].fd, packet, sizeof(packet), 0,
-                    (struct sockaddr *)&sender, &sender_length);
-            if (length < 0) {
-                if (errno != EAGAIN && errno != EWOULDBLOCK) {
-                    fprintf(stderr, "[input-selector] receive failed: %s\n", strerror(errno));
-                }
-                continue;
-            }
-            valid = inputs[index].channel == VIDEO_RTP ? valid_rtp(packet, (size_t)length, 96) :
-                    inputs[index].channel == AUDIO_RTP ? valid_rtp(packet, (size_t)length, 111) :
-                    valid_rtcp(packet, (size_t)length);
-            if (!valid) {
-                continue;
-            }
-            packet_counts[inputs[index].source]++;
+            while (running) {
+                struct sockaddr_in sender;
+                socklen_t sender_length = sizeof(sender);
+                ssize_t length = recvfrom(inputs[index].fd, packet, sizeof(packet), 0,
+                        (struct sockaddr *)&sender, &sender_length);
+                bool valid;
 
-            if (inputs[index].channel == VIDEO_RTP) {
-                if (active_source == SOURCE_NONE &&
-                        candidate_ready(&candidates[inputs[index].source], packet, now_ms)) {
-                    active_source = inputs[index].source;
-                    active_last_video_ms = now_ms;
-                    switches++;
-                    if (active_source == SOURCE_DIRECT) {
-                        (void)inet_ntop(AF_INET, &sender.sin_addr, remote_address, sizeof(remote_address));
-                        remote_port = ntohs(sender.sin_port);
+                if (length < 0) {
+                    if (errno != EAGAIN && errno != EWOULDBLOCK) {
+                        fprintf(stderr, "[input-selector] receive failed: %s\n", strerror(errno));
                     }
-                    printf("[input-selector] selected %s input\n", source_name(active_source));
-                } else if (active_source == inputs[index].source) {
-                    active_last_video_ms = now_ms;
-                    if (active_source == SOURCE_DIRECT) {
-                        (void)inet_ntop(AF_INET, &sender.sin_addr, remote_address, sizeof(remote_address));
-                        remote_port = ntohs(sender.sin_port);
+                    break;
+                }
+                valid = inputs[index].channel == VIDEO_RTP ? valid_rtp(packet, (size_t)length, 96) :
+                        inputs[index].channel == AUDIO_RTP ? valid_rtp(packet, (size_t)length, 111) :
+                        valid_rtcp(packet, (size_t)length);
+                if (!valid) {
+                    continue;
+                }
+                packet_counts[inputs[index].source]++;
+
+                if (inputs[index].channel == VIDEO_RTP) {
+                    if (active_source == SOURCE_NONE &&
+                            candidate_ready(&candidates[inputs[index].source], packet, now_ms)) {
+                        active_source = inputs[index].source;
+                        active_last_video_ms = now_ms;
+                        switches++;
+                        if (active_source == SOURCE_DIRECT) {
+                            (void)inet_ntop(AF_INET, &sender.sin_addr, remote_address, sizeof(remote_address));
+                            remote_port = ntohs(sender.sin_port);
+                        }
+                        printf("[input-selector] selected %s input\n", source_name(active_source));
+                    } else if (active_source == inputs[index].source) {
+                        active_last_video_ms = now_ms;
+                        if (active_source == SOURCE_DIRECT) {
+                            (void)inet_ntop(AF_INET, &sender.sin_addr, remote_address, sizeof(remote_address));
+                            remote_port = ntohs(sender.sin_port);
+                        }
                     }
                 }
-            }
-            if (active_source != inputs[index].source) {
-                continue;
-            }
-            if (sendto(output_fd, packet, (size_t)length, MSG_DONTWAIT,
-                    (const struct sockaddr *)&outputs[inputs[index].channel], sizeof(outputs[0])) < 0 &&
-                    errno != EAGAIN && errno != EWOULDBLOCK && errno != ENOBUFS) {
-                fprintf(stderr, "[input-selector] forward failed: %s\n", strerror(errno));
+                if (active_source != inputs[index].source) {
+                    continue;
+                }
+                enqueue_packet(&output_queue, inputs[index].channel, packet, (size_t)length);
             }
         }
 
         if (now_ms - last_status_ms >= 1000) {
             write_status(status_path, active_source, direct_enabled, srt_enabled,
                     packet_counts[SOURCE_DIRECT], packet_counts[SOURCE_SRT], switches,
-                    remote_address, remote_port, now_ms);
+                    output_drop_count(&output_queue), remote_address, remote_port, now_ms);
             last_status_ms = now_ms;
         }
     }
@@ -349,6 +469,13 @@ int main(void) {
     for (size_t index = 0; index < input_count; index++) {
         close(inputs[index].fd);
     }
+    pthread_mutex_lock(&output_queue.mutex);
+    output_queue.stopping = true;
+    pthread_cond_signal(&output_queue.available);
+    pthread_mutex_unlock(&output_queue.mutex);
+    (void)pthread_join(output_thread, NULL);
+    pthread_cond_destroy(&output_queue.available);
+    pthread_mutex_destroy(&output_queue.mutex);
     close(output_fd);
     (void)unlink(status_path);
     return EXIT_SUCCESS;

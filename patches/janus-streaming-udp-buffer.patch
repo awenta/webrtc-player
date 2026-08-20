@@ -1,0 +1,23 @@
+diff --git a/src/plugins/janus_streaming.c b/src/plugins/janus_streaming.c
+index 8f461dd..adc42f1 100644
+--- a/src/plugins/janus_streaming.c
++++ b/src/plugins/janus_streaming.c
+@@ -7596,6 +7596,18 @@ static int janus_streaming_allocate_fd(const char *mountpointname, const char *me
+ 					mountpointname, medianame, errno, g_strerror(errno));
+ 				break;
+ 			}
++			/* Absorb frame-sized RTP bursts while the relay thread is scheduled. */
++			int receive_buffer = 4 * 1024 * 1024;
++			if(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &receive_buffer, sizeof(receive_buffer)) != 0) {
++				JANUS_LOG(LOG_WARN, "[%s] Couldn't enlarge the %s UDP receive buffer: %d (%s)\n",
++					mountpointname, medianame, errno, g_strerror(errno));
++			} else {
++				socklen_t receive_buffer_length = sizeof(receive_buffer);
++				if(getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &receive_buffer, &receive_buffer_length) == 0) {
++					JANUS_LOG(LOG_INFO, "[%s] %s UDP receive buffer: %d bytes\n",
++						mountpointname, medianame, receive_buffer);
++				}
++			}
+ 			if(family != AF_INET && setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, sizeof(v6only)) != 0) {
+ 				JANUS_LOG(LOG_ERR, "[%s] setsockopt on socket failed for %s... %d (%s)\n",
+ 					mountpointname, medianame, errno, g_strerror(errno));

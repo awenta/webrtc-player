@@ -1,0 +1,8 @@
+.git
+.gitignore
+CHANGELOG.md
+README.md
+docker-compose.yml
+tests
+*passphrase*.txt
+*.secret

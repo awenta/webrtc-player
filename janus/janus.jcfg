@@ -1,13 +1,14 @@
 general: {
-	configs_folder = "/etc/janus"
-	plugins_folder = "/usr/lib/janus/plugins"
-	transports_folder = "/usr/lib/janus/transports"
-	events_folder = "/usr/lib/janus/events"
-	loggers_folder = "/usr/lib/janus/loggers"
+	configs_folder = "/run/webrtc-player/janus"
+	plugins_folder = "/opt/janus/lib/janus/plugins"
+	transports_folder = "/opt/janus/lib/janus/transports"
+	events_folder = "/opt/janus/lib/janus/events"
+	loggers_folder = "/opt/janus/lib/janus/loggers"
 	log_to_stdout = true
 	debug_level = 4
-	admin_secret = "janusadmin"
+	debug_colors = false
 	server_name = "janus-webrtc-player"
+	exit_on_dl_error = true
 }
 
 certificates: {
@@ -15,6 +16,8 @@ certificates: {
 
 media: {
 	rtp_port_range = "20000-20100"
+	no_media_timer = 5
+	nack_optimizations = true
 }
 
 nat: {
@@ -22,8 +25,7 @@ nat: {
 	ice_lite = true
 	ice_tcp = false
 	full_trickle = false
-	# Set to your public IP if behind NAT
-	# nat_1_1_mapping = "1.2.3.4"
+	# __NAT_MAPPING__
 }
 
 plugins: {
@@ -31,7 +33,8 @@ plugins: {
 }
 
 transports: {
-	disable = "libjanus_pfunix.so,libjanus_nanomsg.so,libjanus_mqtt.so,libjanus_rabbitmq.so"
+	# Nginx owns port 8088; only the loopback WebSocket transport is needed.
+	disable = "libjanus_http.so,libjanus_pfunix.so,libjanus_nanomsg.so,libjanus_mqtt.so,libjanus_rabbitmq.so"
 }
 
 events: {

@@ -1,6 +1,6 @@
 # WebRTC Player
 
-An embeddable, low-latency WebRTC player powered by Janus Gateway. It accepts either direct H.264/Opus RTP or an SRT MPEG-TS contribution feed, then serves the stream to browsers through WebRTC from one container.
+An embeddable, low-latency five-channel WebRTC player powered by Janus Gateway. Each channel accepts either direct H.264/Opus RTP or an SRT MPEG-TS contribution feed, then serves the stream to browsers through WebRTC from one container.
 
 ```text
 SRT (H.264/HEVC + common audio) -> FFmpeg -> H.264/Opus RTP -+
@@ -40,7 +40,15 @@ Open <http://localhost:8088/?stream=1>, or embed it:
 <iframe src="http://localhost:8088/?stream=1" allow="autoplay" style="width:640px;height:360px;border:none"></iframe>
 ```
 
-The player begins muted to satisfy browser autoplay rules. Its native controls can enable audio.
+The player begins muted to satisfy browser autoplay rules. Its native controls can enable audio. All five channels start enabled unless a persisted channel setting explicitly disables one.
+
+| Channel | Player | SRT listener | Direct RTP/RTCP |
+|---|---|---:|---:|
+| 1 | `?stream=1` | 9000 | 5004-5007 |
+| 2 | `?stream=2` | 9001 | 5008-5011 |
+| 3 | `?stream=3` | 9002 | 5012-5015 |
+| 4 | `?stream=4` | 9003 | 5016-5019 |
+| 5 | `?stream=5` | 9004 | 5020-5023 |
 
 ## Automatic Input Selection
 
@@ -58,7 +66,7 @@ When an SRT passphrase or passphrase file is configured, automatic mode disables
 
 ## Monitoring and Setup UI
 
-The root page combines a responsive signal monitor with basic input/output setup. The monitor shows only data available from the running application:
+The root page combines a responsive signal monitor with per-channel input/output setup. Select one of the five channels to update the monitor, connection URLs, settings, and optional browser preview. The monitor shows only data available from the running application:
 
 - Input mode, transport state, listener/caller address, and RTP/RTCP ports
 - SRT output cadence, media bitrate, processing speed, and application CPU/memory use
@@ -67,14 +75,18 @@ The root page combines a responsive signal monitor with basic input/output setup
 
 Runtime status is refreshed from `GET /api/status`; browser receive statistics come directly from `RTCPeerConnection.getStats()`. Direct RTP input bitrate and sender details are not displayed because Janus does not currently expose those values to the monitor.
 
-Select **Setup** to configure the supported runtime settings:
+Select **Disable preview** to stop browser media processing without stopping the channel. This immediately destroys the page's Janus session, closes its WebSocket and peer connection, detaches the media element, stops preview statistics collection, and persists the preference in that browser. Server aggregate output monitoring continues and **Enable preview** reconnects the selected channel.
+
+Select **Config** on a channel card to open all settings for that channel:
 
 - Automatic, RTP-only, or SRT-only input acceptance and source timeout
 - SRT listener/caller URL, expected audio, color handling, and optional encryption
 - Transcode bitrate, x264 preset, maximum dimensions, and frame rate
-- WebRTC stream ID, direct-RTP audio, and the public IP advertised by Janus
+- Direct-RTP audio and the channel's fixed WebRTC/port allocation
 
-Applying settings validates every value, persists them in the `player-config` Docker volume, regenerates the Janus mountpoint, and briefly restarts only the media services. The browser reconnects automatically. Persisted UI settings take precedence over matching environment variables on later container starts; use `docker compose down -v` to remove them and return to environment/default values.
+The top-level **Global settings** button contains only settings shared by every channel, currently the public IP advertised by Janus. Applying channel settings validates and persists that channel, then briefly restarts only its selector and SRT relay. Applying global settings leaves all channel processes running and restarts the shared Janus service. The browser reconnects automatically when its selected output is affected.
+
+Persisted UI settings take precedence over matching environment variables on later container starts; use `docker compose down -v` to remove them and return to environment/default values.
 
 Published HTTP, SRT, RTP/RTCP, and ICE ports are shown but remain read-only because Docker port mappings cannot be changed safely from inside the container. The connection guide displays copy-ready SRT, RTP, player, WebSocket, and iframe values based on the host currently used to open the UI.
 
@@ -84,13 +96,13 @@ The Janus Streaming mountpoint uses two relay helper threads so its RTP receiver
 
 ## SRT Listener
 
-The default automatic mode already runs an SRT listener on UDP port 9000:
+The default automatic mode runs one SRT listener per channel on UDP ports 9000-9004:
 
 ```bash
 docker compose up --build
 ```
 
-Send MPEG-TS from a source to:
+Send MPEG-TS to the selected channel's port, for example Channel 1:
 
 ```text
 srt://<container-host>:9000?mode=caller&latency=120000
@@ -173,6 +185,8 @@ Automatic mode listens for direct RTP by default. Send:
 
 Optional RTCP sender reports use UDP 5006 for video and 5007 for audio. These ports are separate so video RTCP cannot collide with audio RTP.
 
+Channels 2-5 use the subsequent four-port blocks shown in the Quick Start table.
+
 Set `AUDIO_ENABLED=false` for a video-only direct RTP mountpoint.
 
 If direct RTP and SRT arrive together, the first validated video source is selected and the other is ignored until the active input times out.
@@ -181,6 +195,7 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 
 | Variable | Default | Description |
 |---|---|---|
+| `CHANNEL_ENABLED` | `true` | Enable the channel; persisted per-channel settings take precedence |
 | `INPUT_MODE` | `auto` | Automatic RTP/SRT selection, or the `rtp`/`srt` restriction overrides |
 | `INPUT_TIMEOUT_MS` | `5000` | Video silence before automatic mode releases the selected input |
 | `RTP_PACING_US` | `100` | Minimum spacing between video RTP packets forwarded to Janus (0-2000 microseconds) |
@@ -208,6 +223,8 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 | `STREAM_SECRET` | generated | Optional persistent mountpoint edit/destroy secret |
 
 `SRT_PORT` only controls the Docker Compose host-to-container port publication. Keep it consistent with the listener port in `SRT_URL`.
+
+Environment variables and legacy `/config/settings` values migrate to Channel 1. The UI stores independent records for all five channels under `/config/channels`.
 
 ## SRT Encryption
 
@@ -248,8 +265,8 @@ PUBLIC_IP=203.0.113.10 docker compose up
 Allow these ports through the host firewall:
 
 - `8088/tcp`: player and Janus WebSocket proxy
-- `9000/udp`: default SRT listener
-- `5004-5007/udp`: direct RTP/RTCP mode
+- `9000-9004/udp`: SRT listeners for Channels 1-5
+- `5004-5023/udp`: direct RTP/RTCP for Channels 1-5
 - `20000-20100/udp`: Janus WebRTC ICE/DTLS/SRTP
 
 Host networking can simplify ICE on Linux. Remove Compose port publishing when enabling `network_mode: host`.
@@ -258,7 +275,7 @@ Terminate TLS in a trusted reverse proxy for production so the player is served 
 
 ## Operations
 
-The image health check verifies that s6 reports the input selector, Janus, Nginx, and status collector as running, verifies the SRT relay when enabled, and requests Nginx `/healthz`. A disconnected SRT listener remains healthy because automatic mode is ready to accept either supported input; the selected source is shown in the monitoring UI.
+The image health check verifies that s6 reports every enabled channel's selector and SRT relay as running, verifies the shared Janus, Nginx, and status services, and requests Nginx `/healthz`. A disconnected SRT listener remains healthy because automatic mode is ready to accept either supported input; the selected source is shown in the monitoring UI.
 
 Useful commands:
 

@@ -31,7 +31,7 @@ MAX_WIDTH="${MAX_WIDTH:-1920}"
 MAX_HEIGHT="${MAX_HEIGHT:-1080}"
 MAX_FPS="${MAX_FPS:-60}"
 FFMPEG_LOG_LEVEL="${FFMPEG_LOG_LEVEL:-warning}"
-PROGRESS_FIFO=/run/webrtc-player/ffmpeg-progress
+PROGRESS_FIFO="${CHANNEL_RUNTIME_DIR:-/run/webrtc-player}/ffmpeg-progress"
 
 [[ "${SRT_URL}" == srt://* ]] || fail "SRT_URL must start with srt://"
 [[ "${SRT_URL}" != *$'\n'* && "${SRT_URL}" != *$'\r'* ]] || fail "SRT_URL must not contain newlines"
@@ -136,6 +136,6 @@ if [[ "${SRT_AUDIO}" == "true" ]]; then
     )
 fi
 
-echo "[srt-relay] starting codec-normalizing SRT relay (URL and secrets hidden)"
+echo "[srt-relay] channel=${CHANNEL_ID:-1} starting codec-normalizing SRT relay (URL and secrets hidden)"
 echo "[srt-relay] normalized output: H.264 PT=96; audio=${SRT_AUDIO}; color=${SRT_COLOR_MODE}"
 exec /opt/media/bin/ffmpeg "${ffmpeg_args[@]}"

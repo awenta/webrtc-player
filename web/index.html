@@ -23,7 +23,6 @@
   }
 
   *, *::before, *::after { box-sizing: border-box; }
-
   html { min-width: 320px; background: var(--bg); }
 
   body {
@@ -39,6 +38,11 @@
 
   button, input, select, summary, video { font: inherit; }
   button { color: inherit; }
+  button:disabled { cursor: wait; opacity: 0.55; }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+    outline: 2px solid var(--cyan);
+    outline-offset: 2px;
+  }
 
   .shell {
     width: min(1480px, 100%);
@@ -51,11 +55,10 @@
     align-items: center;
     justify-content: space-between;
     gap: 20px;
-    margin-bottom: 24px;
+    margin-bottom: 18px;
   }
 
   .brand { display: flex; align-items: center; gap: 13px; }
-
   .brand-mark {
     display: grid;
     grid-template-columns: repeat(3, 4px);
@@ -68,18 +71,15 @@
     border-radius: 7px;
     background: var(--panel-raised);
   }
-
   .brand-mark i { display: block; border-radius: 3px; background: var(--cyan); }
   .brand-mark i:nth-child(1) { height: 45%; opacity: 0.55; }
   .brand-mark i:nth-child(2) { height: 100%; }
   .brand-mark i:nth-child(3) { height: 70%; opacity: 0.75; }
-
   .brand h1 { margin: 0; font-size: 16px; font-weight: 680; letter-spacing: -0.01em; }
   .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
-
   .topbar-status { display: flex; align-items: center; gap: 12px; }
 
-  .setup-button, .secondary-button, .primary-button, .copy-button, .icon-button {
+  .setup-button, .channel-config-button, .preview-toggle, .secondary-button, .primary-button, .copy-button, .icon-button {
     border: 1px solid var(--line);
     border-radius: 10px;
     color: var(--text);
@@ -87,21 +87,15 @@
     cursor: pointer;
     transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
   }
-
-  .setup-button:hover, .secondary-button:hover, .copy-button:hover, .icon-button:hover {
+  .setup-button:hover, .channel-config-button:hover, .preview-toggle:hover, .secondary-button:hover, .copy-button:hover, .icon-button:hover {
     border-color: #496064;
     background: #202e31;
   }
-
-  .setup-button:active, .secondary-button:active, .primary-button:active, .copy-button:active { transform: translateY(1px); }
+  .setup-button:active, .channel-config-button:active, .preview-toggle:active, .secondary-button:active, .primary-button:active, .copy-button:active { transform: translateY(1px); }
   .setup-button { min-height: 34px; padding: 0 13px; font-size: 12px; font-weight: 680; }
-  button:disabled { cursor: wait; opacity: 0.55; }
-
-  .updated {
-    color: var(--quiet);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 11px;
-  }
+  .preview-head-actions { display: flex; align-items: center; gap: 10px; }
+  .preview-toggle { min-height: 30px; padding: 0 10px; color: var(--muted); font-size: 10px; font-weight: 680; }
+  .updated { color: var(--quiet); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
 
   .badge {
     display: inline-flex;
@@ -117,36 +111,71 @@
     font-weight: 650;
     white-space: nowrap;
   }
-
-  .badge::before, .service-dot, .state-dot {
+  .badge::before, .service-dot, .state-dot, .channel-state-dot {
     width: 7px;
     height: 7px;
+    flex: 0 0 auto;
     border-radius: 50%;
     background: var(--quiet);
     box-shadow: 0 0 0 3px rgba(101, 116, 119, 0.12);
     content: "";
   }
-
-  .badge[data-tone="good"]::before, [data-tone="good"] .state-dot, .service[data-tone="good"] .service-dot {
+  .badge[data-tone="good"]::before, [data-tone="good"] .state-dot,
+  [data-tone="good"] .channel-state-dot, .service[data-tone="good"] .service-dot {
     background: var(--green);
     box-shadow: 0 0 0 3px rgba(120, 211, 154, 0.13);
   }
-
-  .badge[data-tone="warn"]::before, [data-tone="warn"] .state-dot, .service[data-tone="warn"] .service-dot {
+  .badge[data-tone="warn"]::before, [data-tone="warn"] .state-dot,
+  [data-tone="warn"] .channel-state-dot, .service[data-tone="warn"] .service-dot {
     background: var(--amber);
     box-shadow: 0 0 0 3px rgba(239, 189, 105, 0.13);
   }
-
-  .badge[data-tone="bad"]::before, [data-tone="bad"] .state-dot, .service[data-tone="bad"] .service-dot {
+  .badge[data-tone="bad"]::before, [data-tone="bad"] .state-dot,
+  [data-tone="bad"] .channel-state-dot, .service[data-tone="bad"] .service-dot {
     background: var(--red);
     box-shadow: 0 0 0 3px rgba(238, 128, 119, 0.13);
   }
 
-  .hero {
+  .channel-nav {
     display: grid;
-    grid-template-columns: minmax(0, 1.72fr) minmax(300px, 0.72fr);
-    gap: 18px;
-    align-items: stretch;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 18px;
+  }
+  .channel-slot { position: relative; min-width: 0; }
+  .channel-tab {
+    width: 100%;
+    min-width: 0;
+    min-height: 72px;
+    padding: 11px 57px 11px 13px;
+    border: 1px solid var(--line-soft);
+    border-radius: 13px;
+    color: var(--muted);
+    background: rgba(21, 30, 32, 0.72);
+    cursor: pointer;
+    text-align: left;
+    transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+  }
+  .channel-tab:hover { border-color: #496064; background: var(--panel); }
+  .channel-tab[aria-selected="true"] {
+    border-color: rgba(131, 217, 223, 0.7);
+    color: var(--text);
+    background: linear-gradient(135deg, rgba(131, 217, 223, 0.10), rgba(26, 37, 40, 0.96));
+    box-shadow: inset 0 0 0 1px rgba(131, 217, 223, 0.08);
+  }
+  .channel-index { display: block; color: var(--quiet); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; font-weight: 750; letter-spacing: 0.12em; text-transform: uppercase; }
+  .channel-name { display: block; overflow: hidden; margin-top: 5px; font-size: 13px; font-weight: 680; text-overflow: ellipsis; white-space: nowrap; }
+  .channel-state { display: flex; align-items: center; gap: 7px; margin-top: 7px; color: var(--quiet); font-size: 10px; }
+  .channel-state-dot { width: 6px; height: 6px; }
+  .channel-config-button {
+    position: absolute;
+    top: 9px;
+    right: 9px;
+    min-height: 25px;
+    padding: 0 7px;
+    color: var(--quiet);
+    font-size: 9px;
+    font-weight: 700;
   }
 
   .card {
@@ -156,7 +185,6 @@
     background: rgba(21, 30, 32, 0.92);
     box-shadow: 0 22px 65px rgba(0, 0, 0, 0.18);
   }
-
   .card-head {
     display: flex;
     align-items: center;
@@ -166,24 +194,16 @@
     padding: 14px 18px;
     border-bottom: 1px solid var(--line-soft);
   }
-
-  .eyebrow {
-    margin: 0 0 4px;
-    color: var(--quiet);
-    font-size: 10px;
-    font-weight: 750;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-  }
-
+  .eyebrow { margin: 0 0 4px; color: var(--quiet); font-size: 10px; font-weight: 750; letter-spacing: 0.13em; text-transform: uppercase; }
   .card-title { margin: 0; font-size: 15px; font-weight: 650; }
+  .stream-id { color: var(--cyan); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
 
-  .stream-id {
-    color: var(--cyan);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 12px;
+  .hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1.72fr) minmax(300px, 0.72fr);
+    gap: 18px;
+    align-items: stretch;
   }
-
   .video-stage {
     position: relative;
     display: grid;
@@ -195,9 +215,8 @@
       linear-gradient(135deg, rgba(255, 255, 255, 0.018) 25%, transparent 25%) 0 0 / 24px 24px,
       #050809;
   }
-
   #player { width: 100%; height: 100%; object-fit: contain; background: #050809; }
-
+  .preview-card[data-preview-enabled="false"] #player { visibility: hidden; }
   #overlay {
     position: absolute;
     inset: 0;
@@ -211,7 +230,6 @@
     text-align: center;
     pointer-events: none;
   }
-
   #overlay::before {
     width: 8px;
     height: 8px;
@@ -221,146 +239,62 @@
     box-shadow: 0 0 0 4px rgba(239, 189, 105, 0.12);
     content: "";
   }
-
   #overlay.hidden { display: none; }
-
-  .preview-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    min-height: 48px;
-    padding: 10px 18px;
-    color: var(--muted);
-    font-size: 11px;
+  .preview-card[data-preview-enabled="false"] #overlay::before {
+    background: var(--quiet);
+    box-shadow: 0 0 0 4px rgba(101, 116, 119, 0.12);
   }
-
-  .preview-state { display: flex; align-items: center; gap: 8px; }
+  .preview-foot { min-height: 54px; padding: 10px 18px; color: var(--muted); font-size: 11px; }
+  .preview-foot-main { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .preview-state { display: flex; align-items: center; gap: 8px; font-weight: 650; }
   .preview-note { color: var(--quiet); }
+  .preview-diagnostics { display: flex; flex-wrap: wrap; gap: 7px 16px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line-soft); color: var(--quiet); }
+  .preview-diagnostics b { margin-right: 5px; color: var(--muted); font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; }
 
   .signal-card { display: flex; min-height: 100%; flex-direction: column; }
   .signal-card .card-head { flex: 0 0 auto; }
-
-  .signal-path {
-    display: grid;
-    flex: 1;
-    grid-template-rows: repeat(3, 1fr);
-    padding: 9px 18px 18px;
-  }
-
-  .signal-step {
-    position: relative;
-    display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 17px 0;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
+  .signal-path { display: grid; flex: 1; grid-template-rows: repeat(3, 1fr); padding: 9px 18px 18px; }
+  .signal-step { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 17px 0; border-bottom: 1px solid var(--line-soft); }
   .signal-step:last-child { border-bottom: 0; }
-
-  .step-index {
-    display: grid;
-    width: 30px;
-    height: 30px;
-    place-items: center;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    color: var(--cyan);
-    background: var(--panel-raised);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-    font-size: 10px;
-    font-weight: 750;
-  }
-
+  .step-index { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: var(--cyan); background: var(--panel-raised); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; font-weight: 750; }
   .step-copy { min-width: 0; }
   .step-copy h3 { margin: 0; font-size: 13px; font-weight: 650; }
   .step-copy p { overflow: hidden; margin: 4px 0 0; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+  .step-state { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 650; }
 
-  .step-state {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 650;
-  }
-
-  .details {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 18px;
-    margin-top: 18px;
-  }
-
+  .details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
   .details .card { padding-bottom: 6px; }
-
   .metric-list { margin: 0; padding: 5px 18px 12px; }
-
-  .metric {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 20px;
-    min-height: 42px;
-    padding: 11px 0;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
+  .metric { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; min-height: 42px; padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
   .metric:last-child { border-bottom: 0; }
   .metric dt { color: var(--muted); font-size: 11px; }
   .metric dd { overflow-wrap: anywhere; margin: 0; font-size: 12px; font-weight: 620; text-align: right; }
   .metric dd.mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
   .metric dd.accent { color: var(--cyan); }
 
-  .system-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    margin-top: 18px;
-    padding: 14px 18px;
-  }
-
-  .services { display: flex; flex-wrap: wrap; gap: 17px; }
-
-  .service { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
-  .service-dot { display: block; width: 6px; height: 6px; }
-
-  .system-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; color: var(--quiet); font-size: 10px; }
-  .system-meta span { white-space: nowrap; }
-
   .connection-card { margin-top: 18px; }
-
-  .connection-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-  }
-
+  .connection-grid { display: grid; grid-template-columns: 1fr 1fr; }
   .connection-group { padding: 18px; }
   .connection-group + .connection-group { border-left: 1px solid var(--line-soft); }
   .connection-group h3 { margin: 0 0 5px; font-size: 13px; }
   .connection-group > p { margin: 0 0 14px; color: var(--muted); font-size: 11px; line-height: 1.5; }
-
-  .endpoint {
-    display: grid;
-    grid-template-columns: 82px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    min-height: 52px;
-    border-top: 1px solid var(--line-soft);
-  }
-
+  .endpoint { display: grid; grid-template-columns: 94px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 52px; border-top: 1px solid var(--line-soft); }
   .endpoint-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
   .endpoint-value { min-width: 0; }
   .endpoint-value code { display: block; overflow: hidden; color: var(--text); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
   .endpoint-value small { display: block; margin-top: 3px; color: var(--quiet); font-size: 10px; }
   .copy-button { min-height: 28px; padding: 0 9px; color: var(--muted); font-size: 10px; }
 
+  .system-bar { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding: 14px 18px; }
+  .services { display: flex; flex-wrap: wrap; gap: 17px; }
+  .service { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+  .service-dot { display: block; width: 6px; height: 6px; }
+  .system-meta { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 18px; color: var(--quiet); font-size: 10px; }
+  .system-meta span { white-space: nowrap; }
+
   dialog {
-    width: min(720px, calc(100% - 28px));
-    max-height: min(860px, calc(100vh - 28px));
+    width: min(820px, calc(100% - 28px));
+    max-height: min(900px, calc(100vh - 28px));
     margin: auto;
     padding: 0;
     overflow: hidden;
@@ -370,67 +304,34 @@
     background: #121a1c;
     box-shadow: 0 30px 100px rgba(0, 0, 0, 0.58);
   }
-
   dialog::backdrop { background: rgba(3, 6, 7, 0.74); backdrop-filter: blur(5px); }
-  .setup-form { display: flex; max-height: min(860px, calc(100vh - 28px)); flex-direction: column; }
-
-  .dialog-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 18px;
-    padding: 20px 22px;
-    border-bottom: 1px solid var(--line-soft);
-  }
-
+  .setup-form { display: flex; max-height: min(900px, calc(100vh - 28px)); flex-direction: column; }
+  .dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 20px 22px; border-bottom: 1px solid var(--line-soft); }
   .dialog-head h2 { margin: 0; font-size: 18px; }
   .dialog-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; }
   .icon-button { width: 34px; height: 34px; color: var(--muted); font-size: 18px; }
   .dialog-body { overflow-y: auto; padding: 6px 22px 20px; }
-
-  .form-section { padding: 20px 0 5px; }
-  .form-section + .form-section { border-top: 1px solid var(--line-soft); }
-  .form-section-head { margin-bottom: 15px; }
+  .settings-context { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; padding: 18px 0; }
+  .form-section { padding: 20px 0 5px; border-top: 1px solid var(--line-soft); }
+  .form-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 15px; }
   .form-section-head h3 { margin: 0; font-size: 13px; }
-  .form-section-head p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .form-section-head p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.45; text-align: right; }
   .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
   .form-field.full { grid-column: 1 / -1; }
   .form-field label, .check-field > span:first-child { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-
-  .form-field input, .form-field select {
-    width: 100%;
-    min-height: 40px;
-    padding: 0 11px;
-    border: 1px solid var(--line);
-    border-radius: 9px;
-    outline: none;
-    color: var(--text);
-    background: #0d1416;
-    font-size: 12px;
-  }
-
+  .form-field input, .form-field select { width: 100%; min-height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: #0d1416; font-size: 12px; }
   .form-field input:focus, .form-field select:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(131, 217, 223, 0.09); }
+  .form-field input:disabled { color: var(--quiet); }
   .field-help { margin: 6px 0 0; color: var(--quiet); font-size: 10px; line-height: 1.4; }
-
   .check-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; grid-column: 1 / -1; }
   .check-field { display: flex; align-items: center; justify-content: space-between; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 10px; background: rgba(255, 255, 255, 0.015); }
   .check-field > span:first-child { margin: 0; letter-spacing: 0; text-transform: none; }
   .check-field input { width: 17px; height: 17px; accent-color: var(--cyan); }
-
-  details.advanced { margin-top: 17px; border-top: 1px solid var(--line-soft); }
-  details.advanced summary { padding: 16px 0 0; color: var(--muted); cursor: pointer; font-size: 11px; font-weight: 650; }
-  details.advanced .form-grid { padding-top: 15px; }
-
-  .dialog-foot {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 15px 22px;
-    border-top: 1px solid var(--line-soft);
-    background: #101719;
-  }
-
+  .fixed-grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-column: 1 / -1; gap: 8px; margin: 2px 0 0; }
+  .fixed-value { min-width: 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: 9px; background: rgba(255, 255, 255, 0.015); }
+  .fixed-value dt { margin-bottom: 5px; color: var(--quiet); font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .fixed-value dd { overflow: hidden; margin: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .dialog-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 22px; border-top: 1px solid var(--line-soft); background: #101719; }
   .save-status { min-height: 16px; color: var(--muted); font-size: 11px; }
   .save-status.error { color: var(--red); }
   .save-status.success { color: var(--green); }
@@ -445,10 +346,16 @@
     .signal-step { grid-template-columns: 30px minmax(0, 1fr); align-content: start; border-right: 1px solid var(--line-soft); border-bottom: 0; }
     .signal-step:last-child { border-right: 0; }
     .step-state { grid-column: 2; }
-    .details { grid-template-columns: 1fr 1fr; }
-    .details .card:last-child { grid-column: 1 / -1; }
     .connection-grid { grid-template-columns: 1fr; }
     .connection-group + .connection-group { border-top: 1px solid var(--line-soft); border-left: 0; }
+  }
+
+  @media (max-width: 760px) {
+    .channel-nav { display: flex; margin-right: -16px; padding-right: 16px; overflow-x: auto; scroll-snap-type: x proximity; }
+    .channel-slot { min-width: 150px; scroll-snap-align: start; }
+    .channel-tab { min-width: 0; }
+    .details { grid-template-columns: 1fr; gap: 12px; }
+    .fixed-grid { grid-template-columns: 1fr 1fr; }
   }
 
   @media (max-width: 650px) {
@@ -457,20 +364,21 @@
     .updated { display: none; }
     .topbar-status { gap: 7px; }
     .setup-button { padding: 0 10px; }
-    .hero, .details { gap: 12px; }
+    .hero { gap: 12px; }
     .video-stage { min-height: 190px; }
     .signal-path { grid-template-columns: 1fr; gap: 0; }
     .signal-step { grid-template-columns: 34px minmax(0, 1fr) auto; border-right: 0; border-bottom: 1px solid var(--line-soft); }
     .signal-step:last-child { border-bottom: 0; }
     .step-state { grid-column: auto; }
-    .details { grid-template-columns: 1fr; margin-top: 12px; }
-    .details .card:last-child { grid-column: auto; }
+    .preview-foot-main { align-items: flex-start; flex-direction: column; gap: 6px; }
+    .preview-diagnostics { display: grid; grid-template-columns: 1fr 1fr; }
     .system-bar { align-items: flex-start; flex-direction: column; }
     .system-meta { justify-content: flex-start; }
-    .preview-note { display: none; }
-    .endpoint { grid-template-columns: 66px minmax(0, 1fr) auto; gap: 8px; }
-    .form-grid, .check-row { grid-template-columns: 1fr; }
+    .endpoint { grid-template-columns: 74px minmax(0, 1fr) auto; gap: 8px; }
+    .settings-context, .form-grid, .check-row { grid-template-columns: 1fr; }
     .form-field.full, .check-row { grid-column: auto; }
+    .form-section-head { display: block; }
+    .form-section-head p { margin-top: 5px; text-align: left; }
     .dialog-foot { align-items: stretch; flex-direction: column; }
     .dialog-actions { justify-content: flex-end; }
   }
@@ -488,207 +396,199 @@
     </div>
     <div class="topbar-status">
       <span class="updated" id="lastUpdated">Waiting for status</span>
-      <button class="setup-button" id="setupButton" type="button">Setup</button>
-      <span class="badge" id="systemBadge">Checking system</span>
+      <button class="setup-button" id="setupButton" type="button" aria-haspopup="dialog">Global settings</button>
+      <span class="badge" id="systemBadge" data-tone="warn">Loading system</span>
     </div>
   </header>
 
-  <main>
-    <section class="hero" aria-label="Stream overview">
-      <article class="card preview-card">
+  <nav class="channel-nav" aria-label="Channels" role="tablist">
+    <div class="channel-slot" role="presentation">
+      <button class="channel-tab" id="channelTab1" type="button" role="tab" aria-selected="true" aria-controls="channelPanel" data-channel-id="1" data-tone="warn"><span class="channel-index">Channel 01</span><span class="channel-name">Channel 1</span><span class="channel-state"><i class="channel-state-dot"></i><span>Loading</span></span></button>
+      <button class="channel-config-button" type="button" data-channel-config="1" aria-haspopup="dialog" aria-label="Configure Channel 1">Config</button>
+    </div>
+    <div class="channel-slot" role="presentation">
+      <button class="channel-tab" id="channelTab2" type="button" role="tab" aria-selected="false" aria-controls="channelPanel" data-channel-id="2" data-tone="warn" tabindex="-1"><span class="channel-index">Channel 02</span><span class="channel-name">Channel 2</span><span class="channel-state"><i class="channel-state-dot"></i><span>Loading</span></span></button>
+      <button class="channel-config-button" type="button" data-channel-config="2" aria-haspopup="dialog" aria-label="Configure Channel 2">Config</button>
+    </div>
+    <div class="channel-slot" role="presentation">
+      <button class="channel-tab" id="channelTab3" type="button" role="tab" aria-selected="false" aria-controls="channelPanel" data-channel-id="3" data-tone="warn" tabindex="-1"><span class="channel-index">Channel 03</span><span class="channel-name">Channel 3</span><span class="channel-state"><i class="channel-state-dot"></i><span>Loading</span></span></button>
+      <button class="channel-config-button" type="button" data-channel-config="3" aria-haspopup="dialog" aria-label="Configure Channel 3">Config</button>
+    </div>
+    <div class="channel-slot" role="presentation">
+      <button class="channel-tab" id="channelTab4" type="button" role="tab" aria-selected="false" aria-controls="channelPanel" data-channel-id="4" data-tone="warn" tabindex="-1"><span class="channel-index">Channel 04</span><span class="channel-name">Channel 4</span><span class="channel-state"><i class="channel-state-dot"></i><span>Loading</span></span></button>
+      <button class="channel-config-button" type="button" data-channel-config="4" aria-haspopup="dialog" aria-label="Configure Channel 4">Config</button>
+    </div>
+    <div class="channel-slot" role="presentation">
+      <button class="channel-tab" id="channelTab5" type="button" role="tab" aria-selected="false" aria-controls="channelPanel" data-channel-id="5" data-tone="warn" tabindex="-1"><span class="channel-index">Channel 05</span><span class="channel-name">Channel 5</span><span class="channel-state"><i class="channel-state-dot"></i><span>Loading</span></span></button>
+      <button class="channel-config-button" type="button" data-channel-config="5" aria-haspopup="dialog" aria-label="Configure Channel 5">Config</button>
+    </div>
+  </nav>
+
+  <main id="channelPanel" role="tabpanel" aria-labelledby="channelTab1">
+    <section class="hero" aria-label="Selected channel overview">
+      <article class="card preview-card" id="previewCard" data-preview-enabled="true">
         <header class="card-head">
           <div>
-            <p class="eyebrow">Live preview</p>
-            <h2 class="card-title">Program output</h2>
+            <p class="eyebrow">Browser preview</p>
+            <h2 class="card-title" id="previewTitle">Channel 1</h2>
           </div>
-          <span class="stream-id" id="streamLabel">STREAM 01</span>
+          <div class="preview-head-actions">
+            <button class="preview-toggle" id="previewToggle" type="button" aria-pressed="true">Disable preview</button>
+            <span class="stream-id" id="streamLabel">STREAM 01</span>
+          </div>
         </header>
         <div class="video-stage">
-          <video id="player" autoplay playsinline muted controls></video>
-          <div id="overlay" role="status" aria-live="polite">Connecting to stream...</div>
+          <video id="player" autoplay playsinline muted controls aria-label="Selected channel WebRTC preview"></video>
+          <div id="overlay" role="status" aria-live="polite">Connecting to preview...</div>
         </div>
         <footer class="preview-foot">
-          <span class="preview-state" id="previewState" data-tone="warn"><i class="state-dot"></i><span>Connecting</span></span>
-          <span class="preview-note">Viewer-local WebRTC preview</span>
+          <div class="preview-foot-main">
+            <span class="preview-state" id="previewState" data-tone="warn"><i class="state-dot"></i><span>Connecting</span></span>
+            <span class="preview-note" id="previewNote">Viewer-local WebRTC preview, not server aggregate telemetry</span>
+          </div>
+          <div class="preview-diagnostics" aria-label="This browser's preview diagnostics">
+            <span><b>Video</b><span id="previewVideo">—</span></span>
+            <span><b>Rate</b><span id="previewRate">—</span></span>
+            <span><b>Network</b><span id="previewNetwork">—</span></span>
+            <span><b>Path</b><span id="previewPath">—</span></span>
+          </div>
         </footer>
       </article>
 
       <aside class="card signal-card">
         <header class="card-head">
           <div>
-            <p class="eyebrow">Overview</p>
+            <p class="eyebrow">Selected channel</p>
             <h2 class="card-title">Signal path</h2>
           </div>
         </header>
         <div class="signal-path">
           <section class="signal-step">
             <span class="step-index">IN</span>
-            <div class="step-copy">
-              <h3 id="inputSummary">Input</h3>
-              <p id="inputSummaryDetail">Loading configuration...</p>
-            </div>
-            <span class="step-state" id="inputState" data-tone="warn"><i class="state-dot"></i><span>Checking</span></span>
+            <div class="step-copy"><h3 id="inputSummary">Input</h3><p id="inputSummaryDetail">Loading channel status...</p></div>
+            <span class="step-state" id="inputState" data-tone="warn"><i class="state-dot"></i><span>Loading</span></span>
           </section>
           <section class="signal-step">
             <span class="step-index">FX</span>
-            <div class="step-copy">
-              <h3 id="processSummary">Processing</h3>
-              <p id="processSummaryDetail">Loading pipeline...</p>
-            </div>
-            <span class="step-state" id="processState" data-tone="warn"><i class="state-dot"></i><span>Checking</span></span>
+            <div class="step-copy"><h3 id="processSummary">Processing</h3><p id="processSummaryDetail">Loading pipeline status...</p></div>
+            <span class="step-state" id="processState" data-tone="warn"><i class="state-dot"></i><span>Loading</span></span>
           </section>
           <section class="signal-step">
             <span class="step-index">OUT</span>
-            <div class="step-copy">
-              <h3>WebRTC</h3>
-              <p id="outputSummaryDetail">Connecting this viewer...</p>
-            </div>
-            <span class="step-state" id="outputState" data-tone="warn"><i class="state-dot"></i><span>Connecting</span></span>
+            <div class="step-copy"><h3 id="outputSummary">WebRTC output</h3><p id="outputSummaryDetail">Loading server output...</p></div>
+            <span class="step-state" id="outputState" data-tone="warn"><i class="state-dot"></i><span>Loading</span></span>
           </section>
         </div>
       </aside>
     </section>
 
-    <section class="details" aria-label="Stream statistics">
+    <section class="details" aria-label="Selected channel server statistics">
       <article class="card">
-        <header class="card-head">
-          <div>
-            <p class="eyebrow">Source</p>
-            <h2 class="card-title">Input</h2>
-          </div>
-        </header>
+        <header class="card-head"><div><p class="eyebrow">Contribution</p><h2 class="card-title">Input</h2></div></header>
         <dl class="metric-list">
-          <div class="metric"><dt>Mode</dt><dd id="inputMode">--</dd></div>
-          <div class="metric"><dt>Address</dt><dd class="mono" id="inputAddress">--</dd></div>
-          <div class="metric"><dt>Video RTP / RTCP</dt><dd class="mono" id="videoInputPorts">--</dd></div>
-          <div class="metric"><dt>Audio RTP / RTCP</dt><dd class="mono" id="audioInputPorts">--</dd></div>
-          <div class="metric"><dt>Transport state</dt><dd id="inputDetailState">--</dd></div>
+          <div class="metric"><dt>Mode</dt><dd id="inputMode">—</dd></div>
+          <div class="metric"><dt>Selected source</dt><dd id="selectedSource">—</dd></div>
+          <div class="metric"><dt>Active endpoint</dt><dd class="mono" id="inputAddress">—</dd></div>
+          <div class="metric"><dt>Video RTP / RTCP</dt><dd class="mono" id="videoInputPorts">—</dd></div>
+          <div class="metric"><dt>Audio RTP / RTCP</dt><dd class="mono" id="audioInputPorts">—</dd></div>
+          <div class="metric"><dt>Direct / SRT packets</dt><dd id="inputPackets">—</dd></div>
+          <div class="metric"><dt>Source switches</dt><dd id="sourceSwitches">—</dd></div>
+          <div class="metric"><dt>Forward drops</dt><dd id="forwardDrops">—</dd></div>
+          <div class="metric"><dt>Transport state</dt><dd id="inputDetailState">—</dd></div>
         </dl>
       </article>
 
       <article class="card">
-        <header class="card-head">
-          <div>
-            <p class="eyebrow">Pipeline</p>
-            <h2 class="card-title">Processing</h2>
-          </div>
-        </header>
+        <header class="card-head"><div><p class="eyebrow">Pipeline</p><h2 class="card-title">Processing</h2></div></header>
         <dl class="metric-list">
-          <div class="metric"><dt>Pipeline</dt><dd id="pipelineMode">--</dd></div>
-          <div class="metric"><dt>Output cadence</dt><dd class="accent" id="encodeFps">--</dd></div>
-          <div class="metric"><dt>Media speed</dt><dd id="mediaSpeed">--</dd></div>
-          <div class="metric"><dt>Media bitrate</dt><dd id="encodedBitrate">--</dd></div>
-          <div class="metric"><dt>App CPU / memory</dt><dd id="appResources">--</dd></div>
+          <div class="metric"><dt>Mode</dt><dd id="pipelineMode">—</dd></div>
+          <div class="metric"><dt>State</dt><dd id="processingActive">—</dd></div>
+          <div class="metric"><dt>Frame</dt><dd id="processingFrame">—</dd></div>
+          <div class="metric"><dt>Output cadence</dt><dd class="accent" id="encodeFps">—</dd></div>
+          <div class="metric"><dt>Media bitrate</dt><dd id="encodedBitrate">—</dd></div>
+          <div class="metric"><dt>Media speed</dt><dd id="mediaSpeed">—</dd></div>
+          <div class="metric"><dt>Elapsed</dt><dd id="processingElapsed">—</dd></div>
+          <div class="metric"><dt>Dropped / duplicated</dt><dd id="processingFrames">—</dd></div>
+          <div class="metric"><dt>App CPU / memory</dt><dd id="appResources">—</dd></div>
         </dl>
       </article>
 
       <article class="card">
-        <header class="card-head">
-          <div>
-            <p class="eyebrow">This browser</p>
-            <h2 class="card-title">WebRTC output</h2>
-          </div>
-        </header>
+        <header class="card-head"><div><p class="eyebrow">Server aggregate</p><h2 class="card-title">Output</h2></div></header>
         <dl class="metric-list">
-          <div class="metric"><dt>Video</dt><dd class="accent" id="videoOutput">--</dd></div>
-          <div class="metric"><dt>Video codec</dt><dd id="videoCodec">--</dd></div>
-          <div class="metric"><dt>Audio</dt><dd id="audioOutput">--</dd></div>
-          <div class="metric"><dt>Packet loss / jitter</dt><dd id="networkQuality">--</dd></div>
-          <div class="metric"><dt>Decoded / dropped frames</dt><dd id="frameQuality">--</dd></div>
-          <div class="metric"><dt>Selected path</dt><dd class="mono" id="networkPath">--</dd></div>
+          <div class="metric"><dt>Transport / stream</dt><dd id="outputTransport">—</dd></div>
+          <div class="metric"><dt>State</dt><dd id="outputActive">—</dd></div>
+          <div class="metric"><dt>Telemetry</dt><dd id="outputTelemetry">—</dd></div>
+          <div class="metric"><dt>Viewers</dt><dd class="accent" id="viewerCount">—</dd></div>
+          <div class="metric"><dt>Aggregate bitrate</dt><dd id="aggregateBitrate">—</dd></div>
+          <div class="metric"><dt>Packets / bytes sent</dt><dd id="outputTraffic">—</dd></div>
+          <div class="metric"><dt>NACKs / remote loss</dt><dd id="outputLoss">—</dd></div>
+          <div class="metric"><dt>RTT / jitter</dt><dd id="outputTiming">—</dd></div>
+          <div class="metric"><dt>Link / media quality</dt><dd id="outputQuality">—</dd></div>
         </dl>
       </article>
     </section>
 
-    <section class="card connection-card" aria-label="Connection guide">
+    <section class="card connection-card" aria-label="Selected channel connection URLs">
       <header class="card-head">
-        <div>
-          <p class="eyebrow">Setup reference</p>
-          <h2 class="card-title">Connect to this instance</h2>
-        </div>
+        <div><p class="eyebrow">Channel reference</p><h2 class="card-title">Connection URLs</h2></div>
+        <span class="stream-id" id="connectionChannelLabel">CHANNEL 01</span>
       </header>
       <div class="connection-grid">
         <section class="connection-group">
-          <h3>Send media in</h3>
-          <p>Use one supported input. Automatic mode selects the first valid source.</p>
-          <div class="endpoint">
-            <span class="endpoint-label">SRT</span>
-            <span class="endpoint-value"><code id="srtConnectValue">--</code><small id="srtConnectHint">MPEG-TS caller</small></span>
-            <button class="copy-button" type="button" data-copy="srtConnectValue">Copy</button>
-          </div>
-          <div class="endpoint">
-            <span class="endpoint-label">Video RTP</span>
-            <span class="endpoint-value"><code id="videoRtpConnectValue">--</code><small>H.264 · PT 96</small></span>
-            <button class="copy-button" type="button" data-copy="videoRtpConnectValue">Copy</button>
-          </div>
-          <div class="endpoint">
-            <span class="endpoint-label">Audio RTP</span>
-            <span class="endpoint-value"><code id="audioRtpConnectValue">--</code><small>Opus stereo · PT 111</small></span>
-            <button class="copy-button" type="button" data-copy="audioRtpConnectValue">Copy</button>
-          </div>
+          <h3>Input: direct RTP/RTCP and SRT</h3>
+          <p>Send media to this channel only. Availability follows its configured input mode.</p>
+          <div class="endpoint"><span class="endpoint-label">SRT</span><span class="endpoint-value"><code id="srtConnectValue">—</code><small id="srtConnectHint">MPEG-TS contribution</small></span><button class="copy-button" type="button" data-copy="srtConnectValue">Copy</button></div>
+          <div class="endpoint"><span class="endpoint-label">Video RTP</span><span class="endpoint-value"><code id="videoRtpConnectValue">—</code><small>H.264, payload type 96</small></span><button class="copy-button" type="button" data-copy="videoRtpConnectValue">Copy</button></div>
+          <div class="endpoint"><span class="endpoint-label">Video RTCP</span><span class="endpoint-value"><code id="videoRtcpConnectValue">—</code><small>Video control feedback</small></span><button class="copy-button" type="button" data-copy="videoRtcpConnectValue">Copy</button></div>
+          <div class="endpoint"><span class="endpoint-label">Audio RTP</span><span class="endpoint-value"><code id="audioRtpConnectValue">—</code><small>Opus stereo, payload type 111</small></span><button class="copy-button" type="button" data-copy="audioRtpConnectValue">Copy</button></div>
+          <div class="endpoint"><span class="endpoint-label">Audio RTCP</span><span class="endpoint-value"><code id="audioRtcpConnectValue">—</code><small>Audio control feedback</small></span><button class="copy-button" type="button" data-copy="audioRtcpConnectValue">Copy</button></div>
         </section>
         <section class="connection-group">
-          <h3>View WebRTC out</h3>
-          <p>The player URL and embed code follow the active stream ID.</p>
-          <div class="endpoint">
-            <span class="endpoint-label">Player</span>
-            <span class="endpoint-value"><code id="playerConnectValue">--</code><small>WebRTC monitor and player</small></span>
-            <button class="copy-button" type="button" data-copy="playerConnectValue">Copy</button>
-          </div>
-          <div class="endpoint">
-            <span class="endpoint-label">Embed</span>
-            <span class="endpoint-value"><code id="embedConnectValue">--</code><small>Responsive iframe example</small></span>
-            <button class="copy-button" type="button" data-copy="embedConnectValue">Copy</button>
-          </div>
-          <div class="endpoint">
-            <span class="endpoint-label">WebSocket</span>
-            <span class="endpoint-value"><code id="websocketConnectValue">--</code><small>Janus WebRTC signaling</small></span>
-            <button class="copy-button" type="button" data-copy="websocketConnectValue">Copy</button>
-          </div>
+          <h3>Output: browser/WebRTC preview</h3>
+          <p>These open the selected Janus mountpoint. Server Output metrics above aggregate all viewers.</p>
+          <div class="endpoint"><span class="endpoint-label">Player</span><span class="endpoint-value"><code id="playerConnectValue">—</code><small>WebRTC player for this channel</small></span><button class="copy-button" type="button" data-copy="playerConnectValue">Copy</button></div>
+          <div class="endpoint"><span class="endpoint-label">Embed</span><span class="endpoint-value"><code id="embedConnectValue">—</code><small>Responsive iframe example</small></span><button class="copy-button" type="button" data-copy="embedConnectValue">Copy</button></div>
+          <div class="endpoint"><span class="endpoint-label">WebSocket</span><span class="endpoint-value"><code id="websocketConnectValue">—</code><small>Shared Janus WebRTC signaling</small></span><button class="copy-button" type="button" data-copy="websocketConnectValue">Copy</button></div>
         </section>
       </div>
     </section>
 
-    <footer class="card system-bar" aria-label="Service status">
+    <footer class="card system-bar" aria-label="Selected channel and shared service status">
       <div class="services">
         <span class="service" id="selectorService"><i class="service-dot"></i><span>Selector</span></span>
-        <span class="service" id="janusService"><i class="service-dot"></i><span>Janus</span></span>
         <span class="service" id="ffmpegService"><i class="service-dot"></i><span>FFmpeg</span></span>
+        <span class="service" id="janusService"><i class="service-dot"></i><span>Janus</span></span>
         <span class="service" id="nginxService"><i class="service-dot"></i><span>Nginx</span></span>
       </div>
       <div class="system-meta">
-        <span id="serverAddress">Server --</span>
-        <span id="icePorts">ICE --</span>
-        <span id="systemLoad">Load --</span>
-        <span id="systemUptime">Uptime --</span>
+        <span id="serverAddress">Server —</span><span id="icePorts">ICE —</span><span id="systemLoad">Load —</span><span id="systemUptime">Uptime —</span>
       </div>
     </footer>
   </main>
 </div>
 
-<dialog id="setupDialog">
-  <form class="setup-form" id="setupForm">
+<dialog id="channelDialog">
+  <form class="setup-form" id="channelForm">
     <header class="dialog-head">
-      <div>
-        <h2>Input and output setup</h2>
-        <p>Settings persist across container restarts. Applying briefly restarts the media path.</p>
-      </div>
-      <button class="icon-button" id="closeSetupButton" type="button" aria-label="Close setup">&times;</button>
+      <div><h2 id="channelSettingsTitle">Channel settings</h2><p>Applying settings briefly restarts only this channel's media path.</p></div>
+      <button class="icon-button" id="closeChannelButton" type="button" aria-label="Close channel settings">&times;</button>
     </header>
     <div class="dialog-body">
-      <section class="form-section">
-        <div class="form-section-head">
-          <h3>Input</h3>
-          <p>Automatic mode accepts supported RTP and SRT and selects the first active source.</p>
+      <div class="settings-context">
+        <div class="form-field">
+          <label for="configChannelName">Channel name</label>
+          <input id="configChannelName" name="CHANNEL_NAME" type="text" maxlength="64" required>
         </div>
+        <label class="check-field"><span>Channel enabled</span><input id="configChannelEnabled" name="CHANNEL_ENABLED" type="checkbox"></label>
+      </div>
+
+      <section class="form-section">
+        <div class="form-section-head"><h3>Input</h3><p>Contribution selection, transport, audio, and SRT security.</p></div>
         <div class="form-grid">
           <div class="form-field">
             <label for="configInputMode">Accepted inputs</label>
-            <select id="configInputMode" name="INPUT_MODE">
-              <option value="auto">Automatic RTP + SRT</option>
-              <option value="srt">SRT only</option>
-              <option value="rtp">Direct RTP only</option>
-            </select>
+            <select id="configInputMode" name="INPUT_MODE"><option value="auto">Automatic RTP + SRT</option><option value="srt">SRT only</option><option value="rtp">Direct RTP only</option></select>
           </div>
           <div class="form-field">
             <label for="configInputTimeout">Release timeout</label>
@@ -702,85 +602,84 @@
           </div>
           <div class="check-row">
             <label class="check-field"><span>Expect audio in SRT</span><input id="configSrtAudio" name="SRT_AUDIO" type="checkbox"></label>
-            <label class="check-field"><span>Enable audio in direct RTP</span><input id="configAudioEnabled" name="AUDIO_ENABLED" type="checkbox"></label>
-          </div>
-        </div>
-      </section>
-
-      <section class="form-section">
-        <div class="form-section-head">
-          <h3>WebRTC output</h3>
-          <p>The protocol and ICE port range remain fixed; these settings control the advertised stream.</p>
-        </div>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="configStreamId">Stream ID</label>
-            <input id="configStreamId" name="STREAM_ID" type="number" min="1" max="2147483647" required>
-          </div>
-          <div class="form-field">
-            <label for="configPublicIp">Public IP</label>
-            <input id="configPublicIp" name="PUBLIC_IP" type="text" placeholder="Automatic / local" spellcheck="false">
-            <p class="field-help">Set only when browsers reach Janus through one-to-one NAT.</p>
-          </div>
-        </div>
-      </section>
-
-      <details class="advanced">
-        <summary>Processing and encryption</summary>
-        <div class="form-grid">
-          <div class="form-field">
-            <label for="configVideoPreset">x264 preset</label>
-            <select id="configVideoPreset" name="VIDEO_PRESET">
-              <option>ultrafast</option><option>superfast</option><option>veryfast</option><option>faster</option><option>fast</option><option>medium</option><option>slow</option><option>slower</option><option>veryslow</option>
-            </select>
-          </div>
-          <div class="form-field">
-            <label for="configColorMode">Color handling</label>
-            <select id="configColorMode" name="SRT_COLOR_MODE">
-              <option value="auto">Automatic / fast conversion</option>
-              <option value="fast">Known SDR</option>
-              <option value="hdr-to-sdr">HDR to SDR tone mapping</option>
-            </select>
-          </div>
-          <div class="form-field">
-            <label for="configVideoBitrate">Video bitrate</label>
-            <input id="configVideoBitrate" name="VIDEO_BITRATE" type="text" required>
-          </div>
-          <div class="form-field">
-            <label for="configAudioBitrate">Audio bitrate</label>
-            <input id="configAudioBitrate" name="AUDIO_BITRATE" type="text" required>
-          </div>
-          <div class="form-field">
-            <label for="configMaxWidth">Maximum width</label>
-            <input id="configMaxWidth" name="MAX_WIDTH" type="number" min="16" max="8192" required>
-          </div>
-          <div class="form-field">
-            <label for="configMaxHeight">Maximum height</label>
-            <input id="configMaxHeight" name="MAX_HEIGHT" type="number" min="16" max="8192" required>
-          </div>
-          <div class="form-field">
-            <label for="configMaxFps">Maximum FPS</label>
-            <input id="configMaxFps" name="MAX_FPS" type="number" min="1" max="60" required>
+            <label class="check-field"><span>Enable direct RTP audio</span><input id="configAudioEnabled" name="AUDIO_ENABLED" type="checkbox"></label>
           </div>
           <div class="form-field">
             <label for="configPbkeylen">SRT encryption strength</label>
             <select id="configPbkeylen" name="SRT_PBKEYLEN"><option value="16">AES-128</option><option value="24">AES-192</option><option value="32">AES-256</option></select>
           </div>
+          <div class="form-field">
+            <label for="passphraseAction">Passphrase action</label>
+            <select id="passphraseAction" name="passphraseAction"><option value="keep">Keep current passphrase</option><option value="set">Set or replace passphrase</option><option value="clear">Clear saved passphrase</option></select>
+          </div>
           <div class="form-field full">
             <label for="configPassphrase">SRT passphrase</label>
-            <input id="configPassphrase" name="SRT_PASSPHRASE" type="password" minlength="10" maxlength="79" autocomplete="new-password" placeholder="Leave blank to keep the current passphrase">
-            <p class="field-help" id="passphraseHelp">No saved passphrase. Enter 10-79 characters to enable encryption.</p>
+            <input id="configPassphrase" name="SRT_PASSPHRASE" type="password" minlength="10" maxlength="79" autocomplete="new-password" disabled>
+            <p class="field-help" id="passphraseHelp">Loading passphrase state...</p>
           </div>
-          <label class="check-field form-field full"><span>Clear saved SRT passphrase</span><input id="clearPassphrase" type="checkbox"></label>
         </div>
-      </details>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-head"><h3>Processing</h3><p>Codec normalization, rate control, and output bounds.</p></div>
+        <div class="form-grid">
+          <div class="form-field">
+            <label for="configColorMode">Color handling</label>
+            <select id="configColorMode" name="SRT_COLOR_MODE"><option value="auto">Automatic / fast conversion</option><option value="fast">Known SDR</option><option value="hdr-to-sdr">HDR to SDR tone mapping</option></select>
+          </div>
+          <div class="form-field">
+            <label for="configVideoPreset">x264 preset</label>
+            <select id="configVideoPreset" name="VIDEO_PRESET"><option>ultrafast</option><option>superfast</option><option>veryfast</option><option>faster</option><option>fast</option><option>medium</option><option>slow</option><option>slower</option><option>veryslow</option></select>
+          </div>
+          <div class="form-field"><label for="configVideoBitrate">Video bitrate</label><input id="configVideoBitrate" name="VIDEO_BITRATE" type="text" required></div>
+          <div class="form-field"><label for="configVideoBufferSize">Video buffer size</label><input id="configVideoBufferSize" name="VIDEO_BUFFER_SIZE" type="text" required><p class="field-help">x264 VBV reservoir, for example 2M.</p></div>
+          <div class="form-field"><label for="configAudioBitrate">Audio bitrate</label><input id="configAudioBitrate" name="AUDIO_BITRATE" type="text" required></div>
+          <div class="form-field"><label for="configMaxFps">Maximum FPS</label><input id="configMaxFps" name="MAX_FPS" type="number" min="1" max="60" required></div>
+          <div class="form-field"><label for="configMaxWidth">Maximum width</label><input id="configMaxWidth" name="MAX_WIDTH" type="number" min="16" max="8192" required></div>
+          <div class="form-field"><label for="configMaxHeight">Maximum height</label><input id="configMaxHeight" name="MAX_HEIGHT" type="number" min="16" max="8192" required></div>
+        </div>
+      </section>
+
+      <section class="form-section">
+        <div class="form-section-head"><h3>Output</h3><p>Fixed allocation for this channel.</p></div>
+        <div class="form-grid">
+          <dl class="fixed-grid" aria-label="Fixed channel allocation">
+            <div class="fixed-value"><dt>Stream ID</dt><dd id="fixedStreamId">—</dd></div>
+            <div class="fixed-value"><dt>Video / audio RTP</dt><dd id="fixedRtpPorts">—</dd></div>
+            <div class="fixed-value"><dt>SRT / HTTP</dt><dd id="fixedServicePorts">—</dd></div>
+            <div class="fixed-value"><dt>ICE ports</dt><dd id="fixedIcePorts">—</dd></div>
+          </dl>
+        </div>
+      </section>
     </div>
     <footer class="dialog-foot">
-      <span class="save-status" id="saveStatus" role="status" aria-live="polite"></span>
-      <div class="dialog-actions">
-        <button class="secondary-button" id="cancelSetupButton" type="button">Cancel</button>
-        <button class="primary-button" id="saveSetupButton" type="submit">Apply settings</button>
-      </div>
+      <span class="save-status" id="channelSaveStatus" role="status" aria-live="polite"></span>
+      <div class="dialog-actions"><button class="secondary-button" id="cancelChannelButton" type="button">Cancel</button><button class="primary-button" id="saveChannelButton" type="submit">Apply channel settings</button></div>
+    </footer>
+  </form>
+</dialog>
+
+<dialog id="globalDialog">
+  <form class="setup-form" id="globalForm">
+    <header class="dialog-head">
+      <div><h2>Global settings</h2><p>Shared WebRTC reachability settings for all five channels.</p></div>
+      <button class="icon-button" id="closeGlobalButton" type="button" aria-label="Close global settings">&times;</button>
+    </header>
+    <div class="dialog-body">
+      <section class="form-section" style="border-top:0">
+        <div class="form-section-head"><h3>Network</h3><p>Changes briefly restart the shared Janus WebRTC service.</p></div>
+        <div class="form-grid">
+          <div class="form-field full">
+            <label for="configPublicIp">Public IP</label>
+            <input id="configPublicIp" name="PUBLIC_IP" type="text" placeholder="Automatic / local" spellcheck="false">
+            <p class="field-help">Shared by all channels. Set only when browsers reach Janus through one-to-one NAT.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+    <footer class="dialog-foot">
+      <span class="save-status" id="globalSaveStatus" role="status" aria-live="polite"></span>
+      <div class="dialog-actions"><button class="secondary-button" id="cancelGlobalButton" type="button">Cancel</button><button class="primary-button" id="saveGlobalButton" type="submit">Apply global settings</button></div>
     </footer>
   </form>
 </dialog>
@@ -789,187 +688,406 @@
 (function() {
   "use strict";
 
+  var DASH = "—";
+  var CHANNEL_COUNT = 5;
+  var PREVIEW_STORAGE_KEY = "webrtc-player-preview-enabled";
   var params = new URLSearchParams(window.location.search);
-  var followConfiguredStream = !params.has("stream");
-  var streamId = parseInt(params.get("stream") || "1", 10);
-  if (!Number.isSafeInteger(streamId) || streamId < 1) streamId = 1;
+  var selectedChannelId = parseInt(params.get("stream") || "1", 10);
+  if (!Number.isSafeInteger(selectedChannelId) || selectedChannelId < 1 || selectedChannelId > CHANNEL_COUNT) selectedChannelId = 1;
+  var streamId = selectedChannelId;
   var wsUrl = params.get("ws") || ((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
 
   var video = document.getElementById("player");
   var overlay = document.getElementById("overlay");
-  var ws, pc, keepAlive, reconnectTimer;
+  var ws = null;
+  var pc = null;
+  var keepAlive = null;
+  var reconnectTimer = null;
+  var rtcStatsTimer = null;
+  var activeSessionId = null;
+  var connectionGeneration = 0;
   var latestStatus = null;
+  var latestConfig = null;
+  var editingChannelId = null;
   var previousRtc = Object.create(null);
   var lastMediaAt = 0;
+  var lastStatusReceivedAt = 0;
+  var statusRequestPending = false;
+  var statusFetchFailed = false;
+  var previewEnabled = true;
 
-  function byId(id) { return document.getElementById(id); }
-
-  function setText(id, value) {
-    byId(id).textContent = value === null || value === undefined || value === "" ? "--" : String(value);
+  try {
+    previewEnabled = window.localStorage.getItem(PREVIEW_STORAGE_KEY) !== "false";
+  } catch (error) {
+    log("Preview preference storage is unavailable", error);
   }
 
+  function byId(id) { return document.getElementById(id); }
+  function isPresent(value) { return value !== null && value !== undefined && value !== ""; }
+  function asFiniteNumber(value) {
+    if (!isPresent(value)) return null;
+    var number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+  function setText(id, value, missingValue) {
+    var element = byId(id);
+    if (!element) return;
+    element.textContent = isPresent(value) ? String(value) : (missingValue || DASH);
+  }
   function setTone(id, tone, label) {
     var element = byId(id);
+    if (!element) return;
     element.dataset.tone = tone;
     var labelElement = element.querySelector("span:last-child");
     if (labelElement) labelElement.textContent = label;
     else element.textContent = label;
   }
-
   function log() {
     var args = Array.prototype.slice.call(arguments);
     args.unshift("[player]");
     console.log.apply(console, args);
   }
-
-  function showStatus(message) {
-    overlay.textContent = message;
-    overlay.classList.remove("hidden");
+  function titleCase(value) {
+    if (!isPresent(value)) return DASH;
+    return String(value).replace(/[-_]/g, " ").replace(/\b\w/g, function(character) { return character.toUpperCase(); });
   }
-
-  function hideOverlay() { overlay.classList.add("hidden"); }
-
-  function send(message) {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify(message));
+  function plural(value, singular, pluralForm) { return value + " " + (value === 1 ? singular : (pluralForm || singular + "s")); }
+  function formatInteger(value) {
+    var number = asFiniteNumber(value);
+    return number === null ? DASH : Math.round(number).toLocaleString();
   }
-
-  function tx() { return Math.random().toString(36).substring(2, 10); }
-
+  function formatDecimal(value, digits, suffix) {
+    var number = asFiniteNumber(value);
+    return number === null ? DASH : number.toFixed(digits) + (suffix || "");
+  }
+  function formatBitrate(bitsPerSecond) {
+    var number = asFiniteNumber(bitsPerSecond);
+    if (number === null) return DASH;
+    if (number >= 1000000000) return (number / 1000000000).toFixed(2) + " Gbps";
+    if (number >= 1000000) return (number / 1000000).toFixed(2) + " Mbps";
+    if (number >= 1000) return Math.round(number / 1000) + " kbps";
+    return Math.round(number) + " bps";
+  }
+  function formatBytes(bytes) {
+    var number = asFiniteNumber(bytes);
+    if (number === null) return DASH;
+    if (number >= 1073741824) return (number / 1073741824).toFixed(2) + " GiB";
+    if (number >= 1048576) return (number / 1048576).toFixed(2) + " MiB";
+    if (number >= 1024) return (number / 1024).toFixed(1) + " KiB";
+    return Math.round(number) + " B";
+  }
   function formatDuration(totalSeconds) {
-    if (!Number.isFinite(totalSeconds)) return "--";
-    var days = Math.floor(totalSeconds / 86400);
-    var hours = Math.floor((totalSeconds % 86400) / 3600);
-    var minutes = Math.floor((totalSeconds % 3600) / 60);
+    var number = asFiniteNumber(totalSeconds);
+    if (number === null) return DASH;
+    var days = Math.floor(number / 86400);
+    var hours = Math.floor((number % 86400) / 3600);
+    var minutes = Math.floor((number % 3600) / 60);
     if (days) return days + "d " + hours + "h";
     if (hours) return hours + "h " + minutes + "m";
     return minutes + "m";
   }
-
-  function formatBitrate(bitsPerSecond) {
-    if (!Number.isFinite(bitsPerSecond)) return "--";
-    if (bitsPerSecond >= 1000000) return (bitsPerSecond / 1000000).toFixed(2) + " Mbps";
-    if (bitsPerSecond >= 1000) return Math.round(bitsPerSecond / 1000) + " kbps";
-    return Math.round(bitsPerSecond) + " bps";
+  function formatPair(first, second, separator) {
+    if (!isPresent(first) && !isPresent(second)) return DASH;
+    return (isPresent(first) ? String(first) : DASH) + (separator || " / ") + (isPresent(second) ? String(second) : DASH);
   }
-
   function formatCandidate(candidate) {
-    if (!candidate) return "--";
-    var address = candidate.address || candidate.ip || "unknown";
-    var port = candidate.port ? ":" + candidate.port : "";
-    return address + port;
+    if (!candidate) return DASH;
+    var address = candidate.address || candidate.ip;
+    if (!isPresent(address)) return DASH;
+    return address + (isPresent(candidate.port) ? ":" + candidate.port : "");
+  }
+  function statusTimestamp(status) {
+    if (!status) return null;
+    var value = isPresent(status.updatedAt) ? status.updatedAt : status.timestamp;
+    if (!isPresent(value)) return null;
+    if (typeof value === "number") return new Date(value < 1000000000000 ? value * 1000 : value);
+    var parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+  function selectedStatusChannel() {
+    if (!latestStatus || !Array.isArray(latestStatus.channels)) return null;
+    return latestStatus.channels.find(function(channel) { return Number(channel.id) === selectedChannelId; }) || null;
+  }
+  function configChannel(channelId) {
+    if (!latestConfig || !Array.isArray(latestConfig.channels)) return null;
+    return latestConfig.channels.find(function(channel) { return Number(channel.id) === channelId; }) || null;
+  }
+  function selectedConfigChannel() { return configChannel(selectedChannelId); }
+  function channelName(channelId) {
+    var statusChannel = latestStatus && Array.isArray(latestStatus.channels) ? latestStatus.channels.find(function(channel) { return Number(channel.id) === channelId; }) : null;
+    var configured = configChannel(channelId);
+    return statusChannel && isPresent(statusChannel.name) ? statusChannel.name : configured && isPresent(configured.name) ? configured.name : "Channel " + channelId;
   }
 
-  function inputStatePresentation(state) {
-    if (state === "active") return { tone: "good", label: "Active" };
+  function inputPresentation(channel) {
+    if (!channel) return { tone: "warn", label: "Loading" };
+    if (channel.enabled === false || (channel.input && channel.input.state === "disabled")) return { tone: "neutral", label: "Disabled" };
+    var state = channel.input && channel.input.state;
+    if (state === "active") return { tone: "good", label: "On air" };
+    if (state === "error" || state === "failed") return { tone: "bad", label: "Error" };
     if (state === "ready") return { tone: "good", label: "Ready" };
-    return { tone: "warn", label: "Waiting" };
+    return { tone: "warn", label: state ? titleCase(state) : "Waiting" };
   }
 
-  function renderService(id, service, expected) {
-    var names = { selectorService: "Selector", janusService: "Janus", ffmpegService: "FFmpeg", nginxService: "Nginx" };
+  function renderChannelNavigation() {
+    for (var id = 1; id <= CHANNEL_COUNT; id++) {
+      var tab = byId("channelTab" + id);
+      var statusChannel = latestStatus && Array.isArray(latestStatus.channels) ? latestStatus.channels.find(function(channel) { return Number(channel.id) === id; }) : null;
+      var configured = configChannel(id);
+      var enabled = statusChannel && typeof statusChannel.enabled === "boolean" ? statusChannel.enabled : configured && typeof configured.enabled === "boolean" ? configured.enabled : null;
+      var presentation = statusChannel ? inputPresentation(statusChannel) : enabled === false ? { tone: "neutral", label: "Disabled" } : { tone: "warn", label: "Loading" };
+      var stateLabel = enabled === false ? "Disabled" : enabled === true ? "Enabled · " + presentation.label : presentation.label;
+      var selected = id === selectedChannelId;
+      tab.setAttribute("aria-selected", selected ? "true" : "false");
+      tab.tabIndex = selected ? 0 : -1;
+      tab.dataset.tone = presentation.tone;
+      tab.querySelector(".channel-name").textContent = channelName(id);
+      tab.querySelector(".channel-state span").textContent = stateLabel;
+      tab.setAttribute("aria-label", "Channel " + id + ", " + channelName(id) + ", " + stateLabel);
+      var configButton = document.querySelector('[data-channel-config="' + id + '"]');
+      configButton.setAttribute("aria-label", "Configure " + channelName(id));
+    }
+    byId("channelPanel").setAttribute("aria-labelledby", "channelTab" + selectedChannelId);
+  }
+
+  function renderService(id, service, expected, name) {
     if (!expected) {
-      setTone(id, "neutral", names[id] + " · Not used");
+      setTone(id, "neutral", name + " · Not used");
       return;
     }
-    setTone(id, service && service.running ? "good" : "bad", names[id] + (service && service.running ? " · Running" : " · Stopped"));
+    if (!service || typeof service.running !== "boolean") {
+      setTone(id, "warn", name + " · Unknown");
+      return;
+    }
+    setTone(id, service.running ? "good" : "bad", name + (service.running ? " · Running" : " · Stopped"));
+  }
+
+  function renderSystemStatus(status) {
+    var system = status && status.system ? status.system : {};
+    var shared = system.services || {};
+    var enabledChannels = status && Array.isArray(status.channels) ? status.channels.filter(function(channel) { return channel.enabled !== false; }) : [];
+    var healthy = Boolean(shared.janus && shared.janus.running && shared.nginx && shared.nginx.running) && enabledChannels.every(function(channel) {
+      var services = channel.services || {};
+      var selectorOk = services.selector && services.selector.running;
+      var ffmpegNeeded = channel.input && channel.input.acceptsSrt;
+      return selectorOk && (!ffmpegNeeded || (services.ffmpeg && services.ffmpeg.running));
+    });
+    byId("systemBadge").dataset.tone = healthy ? "good" : "bad";
+    byId("systemBadge").textContent = healthy ? "System online" : "Service issue";
+    var timestamp = statusTimestamp(status);
+    setText("lastUpdated", timestamp ? "Updated " + timestamp.toLocaleTimeString() : "Status received");
+  }
+
+  function renderInput(channel) {
+    var input = channel.input || {};
+    var presentation = inputPresentation(channel);
+    var selectedSource = isPresent(input.selectedSource) ? String(input.selectedSource).toLowerCase() : null;
+    var sourceLabel = selectedSource === "rtp" ? "Direct RTP" : selectedSource === "srt" ? "SRT contribution" : selectedSource === "none" ? "No source" : titleCase(selectedSource);
+    var summary = selectedSource === "rtp" ? "Direct RTP" : selectedSource === "srt" ? "SRT contribution" : input.mode === "auto" ? "Automatic input" : isPresent(input.transport) ? input.transport : "Input";
+    var detail;
+    if (channel.enabled === false) detail = "Channel is disabled";
+    else if (selectedSource === "none") detail = "Listening for an accepted source";
+    else if (isPresent(input.transport)) detail = input.transport + (isPresent(input.role) ? " · " + input.role : "");
+    else detail = "Transport details are not available";
+    setText("inputSummary", summary);
+    setText("inputSummaryDetail", detail);
+    setTone("inputState", presentation.tone, presentation.label);
+
+    setText("inputMode", input.mode === "auto" ? "Automatic" : titleCase(input.mode));
+    setText("selectedSource", sourceLabel);
+    var address = null;
+    if (selectedSource === "rtp" && isPresent(input.remoteAddress)) address = input.remoteAddress + (isPresent(input.remotePort) ? ":" + input.remotePort : "");
+    else if (selectedSource === "srt" && isPresent(input.address)) address = (input.address === "0.0.0.0" ? "All interfaces" : input.address) + (isPresent(input.port) ? ":" + input.port : "");
+    else if (selectedSource === "none") address = "Waiting for source";
+    setText("inputAddress", address);
+    setText("videoInputPorts", input.acceptsRtp === false ? "Not enabled" : formatPair(input.videoRtpPort, input.videoRtcpPort));
+    setText("audioInputPorts", input.acceptsRtp === false ? "Not enabled" : input.audioEnabled === false ? "Disabled" : formatPair(input.audioRtpPort, input.audioRtcpPort));
+    var packets = input.packets;
+    setText("inputPackets", packets ? formatPair(formatInteger(packets.direct), formatInteger(packets.srt)) : null);
+    setText("sourceSwitches", formatInteger(input.sourceSwitches));
+    setText("forwardDrops", formatInteger(input.forwardDrops));
+    setText("inputDetailState", isPresent(input.state) ? titleCase(input.state) : null);
+  }
+
+  function renderProcessing(channel) {
+    var processing = channel.processing || {};
+    var services = channel.services || {};
+    var disabled = channel.enabled === false;
+    var stopped = !disabled && services.ffmpeg && services.ffmpeg.running === false && channel.input && channel.input.acceptsSrt;
+    var tone = disabled ? "neutral" : stopped ? "bad" : processing.active ? "good" : "warn";
+    var label = disabled ? "Disabled" : stopped ? "Stopped" : processing.active ? "Active" : "Standby";
+    setText("processSummary", isPresent(processing.mode) ? titleCase(processing.mode) : "Processing");
+    setText("processSummaryDetail", disabled ? "Channel is disabled" : processing.active ? "Media processing is active" : "Ready when processing is required");
+    setTone("processState", tone, label);
+    setText("pipelineMode", titleCase(processing.mode));
+    setText("processingActive", typeof processing.active === "boolean" ? (processing.active ? "Active" : "Standby") : null);
+    setText("processingFrame", formatInteger(processing.frame));
+    setText("encodeFps", asFiniteNumber(processing.fps) === null ? null : formatDecimal(processing.fps, 1, " fps"));
+    setText("encodedBitrate", processing.bitrate);
+    setText("mediaSpeed", processing.speed);
+    setText("processingElapsed", processing.elapsed);
+    var dropped = formatInteger(processing.droppedFrames);
+    var duplicated = formatInteger(processing.duplicatedFrames);
+    setText("processingFrames", dropped === DASH && duplicated === DASH ? null : dropped + " / " + duplicated);
+    var cpu = asFiniteNumber(processing.cpuPercent);
+    var memory = asFiniteNumber(processing.memoryMiB);
+    setText("appResources", cpu === null && memory === null ? null : (cpu === null ? DASH : cpu.toFixed(1) + "%") + " / " + (memory === null ? DASH : memory.toFixed(1) + " MiB"));
+  }
+
+  function telemetryValue(available, value, formatter) {
+    if (available === false) return "Not available";
+    if (available !== true) return DASH;
+    return formatter ? formatter(value) : (isPresent(value) ? String(value) : DASH);
+  }
+
+  function renderOutput(channel) {
+    var output = channel.output || {};
+    var disabled = channel.enabled === false;
+    var telemetryAvailable = output.telemetryAvailable;
+    var outputTone = disabled ? "neutral" : output.active ? "good" : "warn";
+    var outputLabel = disabled ? "Disabled" : output.active ? "Active" : "Waiting";
+    var viewers = asFiniteNumber(output.viewerCount);
+    var detail;
+    if (disabled) detail = "Channel is disabled";
+    else if (!output.active) detail = "Waiting for active input";
+    else if (telemetryAvailable === false) detail = "Server aggregate telemetry is not available";
+    else if (viewers !== null) detail = plural(viewers, "viewer") + " · " + formatBitrate(output.aggregateBitrate);
+    else detail = "WebRTC output is active";
+    setText("outputSummary", isPresent(output.transport) ? output.transport + " output" : "WebRTC output");
+    setText("outputSummaryDetail", detail);
+    setTone("outputState", outputTone, outputLabel);
+
+    setText("outputTransport", (isPresent(output.transport) ? output.transport : DASH) + " / " + (isPresent(output.streamId) ? "Stream " + output.streamId : DASH));
+    setText("outputActive", typeof output.active === "boolean" ? (output.active ? "Active" : "Inactive") : null);
+    setText("outputTelemetry", telemetryAvailable === true ? "Available" : telemetryAvailable === false ? "Not available" : null);
+    setText("viewerCount", telemetryValue(telemetryAvailable, output.viewerCount, formatInteger));
+    setText("aggregateBitrate", telemetryValue(telemetryAvailable, output.aggregateBitrate, formatBitrate));
+    var packets = telemetryValue(telemetryAvailable, output.packetsSent, formatInteger);
+    var bytes = telemetryValue(telemetryAvailable, output.bytesSent, formatBytes);
+    setText("outputTraffic", telemetryAvailable === false ? "Not available" : packets + " / " + bytes);
+    var nacks = telemetryValue(telemetryAvailable, output.nacksReceived, formatInteger);
+    var remoteLoss = telemetryValue(telemetryAvailable, output.remoteLoss, formatInteger);
+    setText("outputLoss", telemetryAvailable === false ? "Not available" : nacks + " / " + remoteLoss);
+    var rtt = telemetryValue(telemetryAvailable, output.rttMs, function(value) { return formatDecimal(value, 1, " ms"); });
+    var jitter = telemetryValue(telemetryAvailable, output.jitterMs, function(value) { return formatDecimal(value, 1, " ms"); });
+    setText("outputTiming", telemetryAvailable === false ? "Not available" : rtt + " / " + jitter);
+    var link = telemetryValue(telemetryAvailable, output.linkQuality, function(value) { return formatDecimal(value, 0, "%"); });
+    var media = telemetryValue(telemetryAvailable, output.mediaLinkQuality, function(value) { return formatDecimal(value, 0, "%"); });
+    setText("outputQuality", telemetryAvailable === false ? "Not available" : link + " / " + media);
+  }
+
+  function renderSelectedServices(channel) {
+    var services = channel.services || {};
+    var input = channel.input || {};
+    var system = latestStatus && latestStatus.system ? latestStatus.system : {};
+    var shared = system.services || {};
+    renderService("selectorService", services.selector, channel.enabled !== false, "Selector");
+    renderService("ffmpegService", services.ffmpeg, channel.enabled !== false && input.acceptsSrt !== false, "FFmpeg");
+    renderService("janusService", shared.janus, true, "Janus");
+    renderService("nginxService", shared.nginx, true, "Nginx");
+    var configured = selectedConfigChannel();
+    var fixed = configured && configured.fixed ? configured.fixed : {};
+    var address = system.publicIp || system.containerIp;
+    var httpPort = isPresent(system.httpPort) ? system.httpPort : fixed.HTTP_PORT;
+    setText("serverAddress", "Server " + (isPresent(address) ? address : DASH) + (isPresent(httpPort) ? ":" + httpPort : ""));
+    var ice = isPresent(system.icePortStart) && isPresent(system.icePortEnd) ? system.icePortStart + "-" + system.icePortEnd + "/UDP" : fixed.ICE_PORTS;
+    setText("icePorts", "ICE " + (isPresent(ice) ? ice : DASH));
+    var load = asFiniteNumber(system.loadAverage1m);
+    var cores = asFiniteNumber(system.cpuCores);
+    setText("systemLoad", "Load " + (load === null ? DASH : load.toFixed(2)) + (cores === null ? "" : " · " + plural(cores, "core")));
+    var uptime = isPresent(latestStatus.uptimeSeconds) ? latestStatus.uptimeSeconds : system.uptimeSeconds;
+    setText("systemUptime", "Uptime " + formatDuration(uptime));
+  }
+
+  function renderEmptySelectedStatus() {
+    setText("inputSummary", "Input");
+    setText("inputSummaryDetail", "Status is not available");
+    setTone("inputState", "warn", "Unavailable");
+    setText("processSummary", "Processing");
+    setText("processSummaryDetail", "Status is not available");
+    setTone("processState", "warn", "Unavailable");
+    setText("outputSummary", "WebRTC output");
+    setText("outputSummaryDetail", "Server status is not available");
+    setTone("outputState", "warn", "Unavailable");
+    ["inputMode", "selectedSource", "inputAddress", "videoInputPorts", "audioInputPorts", "inputPackets", "sourceSwitches", "forwardDrops", "inputDetailState", "pipelineMode", "processingActive", "processingFrame", "encodeFps", "encodedBitrate", "mediaSpeed", "processingElapsed", "processingFrames", "appResources", "outputTransport", "outputActive", "outputTelemetry", "viewerCount", "aggregateBitrate", "outputTraffic", "outputLoss", "outputTiming", "outputQuality"].forEach(function(id) { setText(id, null); });
+    ["selectorService", "ffmpegService", "janusService", "nginxService"].forEach(function(id) { setTone(id, "warn", byId(id).textContent.split(" · ")[0] + " · Unknown"); });
+  }
+
+  function renderSelectedChannel() {
+    renderChannelNavigation();
+    var name = channelName(selectedChannelId);
+    setText("previewTitle", name);
+    setText("streamLabel", "STREAM " + String(selectedChannelId).padStart(2, "0"));
+    setText("connectionChannelLabel", "CHANNEL " + String(selectedChannelId).padStart(2, "0"));
+    document.title = name + " | Signal Monitor";
+    var channel = selectedStatusChannel();
+    if (channel) {
+      renderInput(channel);
+      renderProcessing(channel);
+      renderOutput(channel);
+      renderSelectedServices(channel);
+    } else {
+      renderEmptySelectedStatus();
+    }
+    renderConnectionGuide();
   }
 
   function renderStatus(status) {
     latestStatus = status;
-    var input = status.input;
-    var processing = status.processing;
-    var output = status.output;
-    var services = status.system.services;
-    var selectedSource = input.selectedSource || (input.mode === "srt" ? "srt" : input.mode === "rtp" ? "rtp" : "none");
-    var isSrt = selectedSource === "srt";
-    var isRtp = selectedSource === "rtp";
-    var healthy = services.selector.running && services.janus.running && services.nginx.running && (!input.acceptsSrt || services.ffmpeg.running);
-    var inputState = inputStatePresentation(input.state);
-
-    byId("systemBadge").dataset.tone = healthy ? "good" : "bad";
-    byId("systemBadge").textContent = healthy ? "System online" : "Service issue";
-    setText("lastUpdated", "Updated " + new Date(status.timestamp * 1000).toLocaleTimeString());
-    setText("streamLabel", "STREAM " + String(output.streamId).padStart(2, "0"));
-    if (followConfiguredStream && streamId !== output.streamId) {
-      streamId = output.streamId;
-      if (ws) {
-        cleanupConnection();
-        setTimeout(connect, 0);
-      }
-    }
-
-    setText("inputSummary", isSrt ? "SRT contribution" : isRtp ? "Direct RTP" : "Automatic input");
-    setText("inputSummaryDetail", selectedSource === "none" ? "Listening for supported RTP and SRT" : input.transport + " · selected automatically");
-    setTone("inputState", inputState.tone, inputState.label);
-
-    setText("processSummary", isSrt ? "Codec normalization" : isRtp ? "RTP passthrough" : "Ready for input");
-    setText("processSummaryDetail", isSrt ? "H.264/HEVC to H.264 + Opus" : isRtp ? "Selected packets to Janus" : "First valid source wins");
-    setTone("processState", healthy ? (selectedSource === "none" || (isSrt && !processing.active) ? "warn" : "good") : "bad", healthy ? (selectedSource === "none" ? "Standby" : isSrt && !processing.active ? "Starting" : "Active") : "Stopped");
-
-    setText("inputMode", input.mode === "auto" ? "Automatic" + (selectedSource === "none" ? "" : " · " + selectedSource.toUpperCase()) : input.transport + (isSrt ? " · " + input.role : ""));
-    var sourceAddress = input.address === "0.0.0.0" ? "All interfaces" : input.address;
-    if (isRtp && input.remoteAddress) sourceAddress = input.remoteAddress + (input.remotePort ? ":" + input.remotePort : "");
-    if (selectedSource === "none") {
-      var listeners = [];
-      if (input.acceptsRtp) listeners.push("RTP :" + input.videoRtpPort);
-      if (input.acceptsSrt) listeners.push("SRT :" + input.srtPort);
-      sourceAddress = listeners.join(" · ");
-    } else if (!isRtp && input.port) {
-      sourceAddress += ":" + input.port;
-    }
-    setText("inputAddress", sourceAddress);
-    setText("videoInputPorts", input.acceptsRtp ? input.videoRtpPort + " / " + input.videoRtcpPort : "Disabled");
-    setText("audioInputPorts", input.acceptsRtp && input.audioEnabled ? input.audioRtpPort + " / " + input.audioRtcpPort : "Disabled");
-    setText("inputDetailState", inputState.label);
-
-    setText("pipelineMode", isSrt ? "Transcode" : isRtp ? "RTP passthrough" : "Standby");
-    setText("encodeFps", processing.active && processing.fps !== null ? Number(processing.fps).toFixed(1) + " fps" : "--");
-    setText("mediaSpeed", processing.active ? processing.speed : "--");
-    setText("encodedBitrate", processing.active ? processing.bitrate : "--");
-    setText("appResources", Number(processing.cpuPercent).toFixed(1) + "% / " + Number(processing.memoryMiB).toFixed(1) + " MiB");
-
-    renderService("selectorService", services.selector, true);
-    renderService("janusService", services.janus, true);
-    renderService("ffmpegService", services.ffmpeg, input.acceptsSrt);
-    renderService("nginxService", services.nginx, true);
-    setText("serverAddress", "Server " + (output.publicIp || output.containerIp || "not advertised") + ":" + output.httpPort);
-    setText("icePorts", "ICE " + output.icePortStart + "-" + output.icePortEnd + "/UDP");
-    setText("systemLoad", "Load " + Number(status.system.loadAverage1m).toFixed(2) + " · " + status.system.cpuCores + " cores");
-    setText("systemUptime", "Uptime " + formatDuration(status.uptimeSeconds));
-    renderConnectionGuide(status);
+    lastStatusReceivedAt = Date.now();
+    statusFetchFailed = false;
+    renderSystemStatus(status);
+    renderSelectedChannel();
   }
 
   function connectionHost() {
-    var host = location.hostname || "localhost";
-    return host.indexOf(":") >= 0 && host.charAt(0) !== "[" ? "[" + host + "]" : host;
+    var configured = latestConfig && latestConfig.global ? latestConfig.global.PUBLIC_IP : null;
+    var system = latestStatus && latestStatus.system ? latestStatus.system : {};
+    var host = configured || system.publicIp || location.hostname || "localhost";
+    host = String(host);
+    if (host.charAt(0) === "[" && host.charAt(host.length - 1) === "]") return host;
+    return host.indexOf(":") >= 0 ? "[" + host + "]" : host;
   }
 
-  function renderConnectionGuide(status) {
+  function renderConnectionGuide() {
     var host = connectionHost();
-    var input = status.input;
-    var output = status.output;
-    var playerUrl = location.origin + "/?stream=" + output.streamId;
-    var srtUrl;
-
-    if (input.role === "caller" && input.address && input.port) {
-      srtUrl = "srt://" + input.address + ":" + input.port + "?mode=listener";
+    var statusChannel = selectedStatusChannel();
+    var input = statusChannel && statusChannel.input ? statusChannel.input : {};
+    var configured = selectedConfigChannel();
+    var fixed = configured && configured.fixed ? configured.fixed : {};
+    var videoRtp = isPresent(input.videoRtpPort) ? input.videoRtpPort : fixed.VIDEO_PORT;
+    var audioRtp = isPresent(input.audioRtpPort) ? input.audioRtpPort : fixed.AUDIO_PORT;
+    var videoRtcp = isPresent(input.videoRtcpPort) ? input.videoRtcpPort : fixed.VIDEO_RTCP_PORT;
+    var audioRtcp = isPresent(input.audioRtcpPort) ? input.audioRtcpPort : fixed.AUDIO_RTCP_PORT;
+    var srtPort = input.srtPublicPort || input.srtPort || fixed.SRT_PORT;
+    var srtUrl = null;
+    if (input.role === "caller" && isPresent(input.address) && isPresent(input.port)) {
+      var callerHost = String(input.address);
+      if (callerHost.indexOf(":") >= 0 && callerHost.charAt(0) !== "[") callerHost = "[" + callerHost + "]";
+      srtUrl = "srt://" + callerHost + ":" + input.port + "?mode=listener";
       setText("srtConnectHint", "Run a listener at the configured remote source");
-    } else {
-      srtUrl = "srt://" + host + ":" + (input.srtPublicPort || input.srtPort || 9000) + "?mode=caller&latency=120000";
-      setText("srtConnectHint", input.acceptsSrt ? "MPEG-TS caller" : "Disabled in the current input mode");
+    } else if (isPresent(srtPort)) {
+      srtUrl = "srt://" + host + ":" + srtPort + "?mode=caller&latency=120000";
+      setText("srtConnectHint", input.acceptsSrt === false ? "Not accepted in the current input mode" : "MPEG-TS caller for this channel");
     }
     setText("srtConnectValue", srtUrl);
-    setText("videoRtpConnectValue", "rtp://" + host + ":" + input.videoRtpPort);
-    setText("audioRtpConnectValue", "rtp://" + host + ":" + input.audioRtpPort);
-    setText("playerConnectValue", playerUrl);
-    setText("embedConnectValue", '<iframe src="' + playerUrl + '" allow="autoplay" style="width:100%;aspect-ratio:16/9;border:0"></iframe>');
+    setText("videoRtpConnectValue", isPresent(videoRtp) ? "rtp://" + host + ":" + videoRtp : null);
+    setText("videoRtcpConnectValue", isPresent(videoRtcp) ? "rtcp://" + host + ":" + videoRtcp : null);
+    setText("audioRtpConnectValue", isPresent(audioRtp) ? "rtp://" + host + ":" + audioRtp : null);
+    setText("audioRtcpConnectValue", isPresent(audioRtcp) ? "rtcp://" + host + ":" + audioRtcp : null);
+    var playerUrl = new URL(location.href);
+    playerUrl.search = "";
+    playerUrl.hash = "";
+    playerUrl.searchParams.set("stream", String(selectedChannelId));
+    if (params.has("ws")) playerUrl.searchParams.set("ws", params.get("ws"));
+    setText("playerConnectValue", playerUrl.href);
+    setText("embedConnectValue", '<iframe src="' + playerUrl.href + '" allow="autoplay" style="width:100%;aspect-ratio:16/9;border:0"></iframe>');
     setText("websocketConnectValue", wsUrl);
   }
 
   async function copyEndpoint(button) {
     var target = byId(button.dataset.copy);
-    if (!target || target.textContent === "--") return;
+    if (!target || target.textContent === DASH || target.textContent === "Not available") return;
     try {
       await navigator.clipboard.writeText(target.textContent);
       var previous = button.textContent;
@@ -980,241 +1098,355 @@
     }
   }
 
-  function configControl(name) {
-    return document.querySelector('[name="' + name + '"]');
+  function configControl(name) { return document.querySelector('[name="' + name + '"]'); }
+  function setConfigControl(name, value) {
+    var control = configControl(name);
+    if (!control) return;
+    if (control.type === "checkbox") control.checked = value === true || value === "true";
+    else control.value = isPresent(value) ? String(value) : "";
   }
-
-  function populateConfig(config) {
-    Object.keys(config.values).forEach(function(name) {
-      var control = configControl(name);
-      if (!control) return;
-      if (control.type === "checkbox") control.checked = config.values[name] === "true";
-      else control.value = config.values[name];
-    });
+  function updatePassphraseControl() {
+    var action = byId("passphraseAction").value;
+    var passphrase = byId("configPassphrase");
+    passphrase.disabled = action !== "set";
+    passphrase.required = action === "set";
+    if (action !== "set") passphrase.value = "";
+  }
+  function populateChannelConfig(config, channelId) {
+    var channel = config.channels.find(function(item) { return Number(item.id) === channelId; });
+    if (!channel) throw new Error("The selected channel configuration is unavailable");
+    setConfigControl("CHANNEL_NAME", channel.name);
+    setConfigControl("CHANNEL_ENABLED", channel.enabled);
+    Object.keys(channel.values || {}).forEach(function(name) { setConfigControl(name, channel.values[name]); });
+    byId("passphraseAction").value = "keep";
     byId("configPassphrase").value = "";
-    byId("configPassphrase").disabled = false;
-    byId("clearPassphrase").checked = false;
-    setText("passphraseHelp", config.passphraseConfigured ? "A passphrase is saved. Leave blank to keep it." : "No saved passphrase. Enter 10-79 characters to enable encryption.");
+    updatePassphraseControl();
+    setText("passphraseHelp", channel.passphraseConfigured ? "A passphrase is saved. Keep it, replace it, or explicitly clear it." : "No passphrase is saved. Choose Set to enable SRT encryption.");
+    var fixed = channel.fixed || {};
+    setText("fixedStreamId", fixed.STREAM_ID);
+    setText("fixedRtpPorts", formatPair(fixed.VIDEO_PORT, fixed.AUDIO_PORT));
+    setText("fixedServicePorts", formatPair(fixed.SRT_PORT, fixed.HTTP_PORT));
+    setText("fixedIcePorts", fixed.ICE_PORTS);
+    setText("channelSettingsTitle", channel.name + " settings");
   }
 
   async function fetchConfig() {
     var response = await fetch("/api/config", { cache: "no-store" });
-    var result = await response.json();
+    var result;
+    try { result = await response.json(); }
+    catch (error) { throw new Error("Configuration returned an invalid response"); }
     if (!response.ok) throw new Error(result.error || "Configuration is unavailable");
-    populateConfig(result);
+    if (result.version !== 2 || !Array.isArray(result.channels)) throw new Error("Configuration schema is not supported");
+    latestConfig = result;
+    renderSelectedChannel();
+    return result;
   }
 
-  async function openSetup() {
-    var dialog = byId("setupDialog");
-    setText("saveStatus", "Loading settings...");
-    byId("saveStatus").className = "save-status";
+  async function postConfig(body) {
+    var response = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "X-Requested-With": "WebRTC-Player" },
+      body: body.toString()
+    });
+    var result;
+    try { result = await response.json(); }
+    catch (error) { throw new Error("Settings returned an invalid response"); }
+    if (!response.ok) throw new Error(result.error || "Settings could not be applied");
+    return result;
+  }
+
+  async function openChannelSetup(channelId) {
+    editingChannelId = channelId;
+    var dialog = byId("channelDialog");
+    byId("saveChannelButton").disabled = true;
+    byId("channelSaveStatus").className = "save-status";
+    setText("channelSaveStatus", "Loading channel settings...");
     dialog.showModal();
     try {
-      await fetchConfig();
-      byId("saveStatus").textContent = "";
+      var config = await fetchConfig();
+      populateChannelConfig(config, editingChannelId);
+      byId("channelSaveStatus").textContent = "";
+      byId("saveChannelButton").disabled = false;
     } catch (error) {
-      byId("saveStatus").className = "save-status error";
-      setText("saveStatus", error.message);
+      byId("channelSaveStatus").className = "save-status error";
+      setText("channelSaveStatus", error.message);
+    }
+  }
+  function closeChannelSetup() {
+    byId("configPassphrase").value = "";
+    byId("channelDialog").close();
+    editingChannelId = null;
+  }
+
+  async function saveChannelSetup(event) {
+    event.preventDefault();
+    var form = byId("channelForm");
+    if (!form.reportValidity() || !editingChannelId) return;
+    var saveButton = byId("saveChannelButton");
+    var channelId = editingChannelId;
+    var body = new URLSearchParams();
+    var valueNames = ["INPUT_MODE", "SRT_URL", "SRT_COLOR_MODE", "VIDEO_PRESET", "VIDEO_BITRATE", "VIDEO_BUFFER_SIZE", "AUDIO_BITRATE", "MAX_WIDTH", "MAX_HEIGHT", "MAX_FPS", "INPUT_TIMEOUT_MS", "SRT_PBKEYLEN"];
+    body.set("scope", "channel");
+    body.set("CHANNEL_ID", String(channelId));
+    body.set("CHANNEL_NAME", configControl("CHANNEL_NAME").value.trim());
+    body.set("CHANNEL_ENABLED", byId("configChannelEnabled").checked ? "true" : "false");
+    valueNames.forEach(function(name) { body.set(name, configControl(name).value.trim()); });
+    body.set("SRT_AUDIO", byId("configSrtAudio").checked ? "true" : "false");
+    body.set("AUDIO_ENABLED", byId("configAudioEnabled").checked ? "true" : "false");
+    var action = byId("passphraseAction").value;
+    body.set("passphraseAction", action);
+    body.set("SRT_PASSPHRASE", action === "set" ? byId("configPassphrase").value : "");
+
+    saveButton.disabled = true;
+    byId("channelSaveStatus").className = "save-status";
+    setText("channelSaveStatus", "Applying channel settings...");
+    try {
+      await postConfig(body);
+      byId("channelSaveStatus").className = "save-status success";
+      setText("channelSaveStatus", "Settings applied to channel " + channelId);
+      fetchConfig().catch(function(error) { log("Configuration refresh failed", error); });
+      fetchStatus();
+      setTimeout(function() {
+        closeChannelSetup();
+        if (channelId === selectedChannelId) restartPreview("Reconnecting preview...");
+      }, 650);
+    } catch (error) {
+      byId("channelSaveStatus").className = "save-status error";
+      setText("channelSaveStatus", error.message);
+    } finally {
+      saveButton.disabled = false;
     }
   }
 
-  function closeSetup() { byId("setupDialog").close(); }
-
-  async function saveSetup(event) {
-    event.preventDefault();
-    var form = byId("setupForm");
-    if (!form.reportValidity()) return;
-    var saveButton = byId("saveSetupButton");
-    var body = new URLSearchParams();
-    var names = ["INPUT_MODE", "SRT_URL", "SRT_COLOR_MODE", "VIDEO_PRESET", "VIDEO_BITRATE", "AUDIO_BITRATE", "MAX_WIDTH", "MAX_HEIGHT", "MAX_FPS", "INPUT_TIMEOUT_MS", "STREAM_ID", "PUBLIC_IP", "SRT_PBKEYLEN"];
-    names.forEach(function(name) { body.set(name, configControl(name).value.trim()); });
-    body.set("SRT_AUDIO", byId("configSrtAudio").checked ? "true" : "false");
-    body.set("AUDIO_ENABLED", byId("configAudioEnabled").checked ? "true" : "false");
-    var passphrase = byId("configPassphrase").value;
-    body.set("SRT_PASSPHRASE", passphrase);
-    body.set("passphraseAction", byId("clearPassphrase").checked ? "clear" : passphrase ? "set" : "keep");
-
-    saveButton.disabled = true;
-    byId("saveStatus").className = "save-status";
-    setText("saveStatus", "Applying settings and restarting media services...");
+  async function openGlobalSetup() {
+    var dialog = byId("globalDialog");
+    byId("saveGlobalButton").disabled = true;
+    byId("globalSaveStatus").className = "save-status";
+    setText("globalSaveStatus", "Loading global settings...");
+    dialog.showModal();
     try {
-      var response = await fetch("/api/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "X-Requested-With": "WebRTC-Player" },
-        body: body.toString()
-      });
-      var result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Settings could not be applied");
-      byId("saveStatus").className = "save-status success";
-      setText("saveStatus", "Settings applied");
-      streamId = parseInt(body.get("STREAM_ID"), 10);
-      if (!followConfiguredStream) {
-        params.set("stream", String(streamId));
-        history.replaceState(null, "", location.pathname + "?" + params.toString());
-      }
+      var config = await fetchConfig();
+      setConfigControl("PUBLIC_IP", config.global && config.global.PUBLIC_IP);
+      byId("globalSaveStatus").textContent = "";
+      byId("saveGlobalButton").disabled = false;
+    } catch (error) {
+      byId("globalSaveStatus").className = "save-status error";
+      setText("globalSaveStatus", error.message);
+    }
+  }
+
+  function closeGlobalSetup() { byId("globalDialog").close(); }
+
+  async function saveGlobalSetup(event) {
+    event.preventDefault();
+    var form = byId("globalForm");
+    if (!form.reportValidity()) return;
+    var saveButton = byId("saveGlobalButton");
+    var body = new URLSearchParams();
+    body.set("scope", "global");
+    body.set("PUBLIC_IP", byId("configPublicIp").value.trim());
+    saveButton.disabled = true;
+    byId("globalSaveStatus").className = "save-status";
+    setText("globalSaveStatus", "Applying global settings...");
+    try {
+      await postConfig(body);
+      byId("globalSaveStatus").className = "save-status success";
+      setText("globalSaveStatus", "Global settings applied");
       await fetchConfig();
+      fetchStatus();
       setTimeout(function() {
-        closeSetup();
-        if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
-        cleanupConnection();
-        connect();
-        fetchStatus();
+        closeGlobalSetup();
+        restartPreview("Reconnecting preview...");
       }, 650);
     } catch (error) {
-      byId("saveStatus").className = "save-status error";
-      setText("saveStatus", error.message);
+      byId("globalSaveStatus").className = "save-status error";
+      setText("globalSaveStatus", error.message);
     } finally {
       saveButton.disabled = false;
     }
   }
 
   async function fetchStatus() {
+    if (statusRequestPending) return;
+    statusRequestPending = true;
     try {
       var response = await fetch("/api/status", { cache: "no-store" });
       if (!response.ok) throw new Error("Status endpoint returned " + response.status);
-      renderStatus(await response.json());
+      var result = await response.json();
+      if (result.version !== 2 || !Array.isArray(result.channels)) throw new Error("Status schema is not supported");
+      renderStatus(result);
     } catch (error) {
       log("Status unavailable", error);
+      statusFetchFailed = true;
       byId("systemBadge").dataset.tone = "warn";
-      byId("systemBadge").textContent = "Status unavailable";
-      setText("lastUpdated", "Waiting for status");
+      byId("systemBadge").textContent = latestStatus ? "Status stale" : "Status unavailable";
+      setText("lastUpdated", latestStatus ? "Last status retained" : "Waiting for status");
+      if (!latestStatus) renderSelectedChannel();
+    } finally {
+      statusRequestPending = false;
     }
   }
 
-  function scheduleReconnect(message) {
+  function updateFreshness() {
+    if (!latestStatus) return;
+    var timestamp = statusTimestamp(latestStatus);
+    var receivedStale = Date.now() - lastStatusReceivedAt > 6500;
+    var sourceStale = timestamp && Date.now() - timestamp.getTime() > 10000;
+    if (statusFetchFailed || receivedStale || sourceStale) {
+      byId("systemBadge").dataset.tone = "warn";
+      byId("systemBadge").textContent = "Status stale";
+      setText("lastUpdated", timestamp ? "Last update " + timestamp.toLocaleTimeString() + " · stale" : "Status stale");
+    }
+  }
+
+  function selectChannel(channelId) {
+    if (!Number.isSafeInteger(channelId) || channelId < 1 || channelId > CHANNEL_COUNT || channelId === selectedChannelId) return;
+    selectedChannelId = channelId;
+    streamId = channelId;
+    params.set("stream", String(channelId));
+    history.replaceState(null, "", location.pathname + "?" + params.toString() + location.hash);
+    renderSelectedChannel();
+    restartPreview("Switching channel preview...");
+  }
+
+  function showStatus(message) {
+    overlay.textContent = message;
+    overlay.classList.remove("hidden");
+    overlay.style.pointerEvents = "none";
+    overlay.style.cursor = "default";
+    overlay.onclick = null;
+  }
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+    overlay.style.pointerEvents = "none";
+    overlay.onclick = null;
+  }
+  function send(message) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify(message));
+  }
+  function tx() { return Math.random().toString(36).substring(2, 10); }
+
+  function scheduleReconnect(message, generation) {
+    if (!previewEnabled) return;
+    if (generation !== undefined && generation !== connectionGeneration) return;
     if (reconnectTimer) return;
     showStatus(message);
     setTone("previewState", "warn", "Reconnecting");
     cleanupConnection();
     reconnectTimer = setTimeout(function() {
       reconnectTimer = null;
-      connect();
+      if (previewEnabled) connect();
     }, 3000);
   }
 
   function connect() {
-    showStatus("Connecting to stream...");
-    setTone("previewState", "warn", "Connecting");
+    if (!previewEnabled) return;
     cleanupConnection();
+    var generation = connectionGeneration;
+    showStatus("Connecting to channel " + streamId + " preview...");
+    setTone("previewState", "warn", "Connecting");
     ws = new WebSocket(wsUrl, "janus-protocol");
-
+    var socket = ws;
     var sessionId = null;
     var handleId = null;
 
-    ws.onopen = function() { send({ janus: "create", transaction: tx() }); };
-    ws.onclose = function() { scheduleReconnect("Disconnected. Reconnecting..."); };
-    ws.onerror = function(error) { log("WebSocket error", error); };
-
-    ws.onmessage = function(event) {
-      var message = JSON.parse(event.data);
-
+    socket.onopen = function() {
+      if (generation !== connectionGeneration) return;
+      send({ janus: "create", transaction: tx() });
+    };
+    socket.onclose = function() {
+      if (generation !== connectionGeneration) return;
+      scheduleReconnect("Preview disconnected. Reconnecting...", generation);
+    };
+    socket.onerror = function(error) { if (generation === connectionGeneration) log("WebSocket error", error); };
+    socket.onmessage = function(event) {
+      if (generation !== connectionGeneration) return;
+      var message;
+      try { message = JSON.parse(event.data); }
+      catch (error) {
+        log("Invalid Janus message", error);
+        scheduleReconnect("Invalid preview response. Retrying...", generation);
+        return;
+      }
       if (message.janus === "success" && !sessionId) {
         sessionId = message.data.id;
+        activeSessionId = sessionId;
         send({ janus: "attach", plugin: "janus.plugin.streaming", session_id: sessionId, transaction: tx() });
         keepAlive = setInterval(function() {
-          send({ janus: "keepalive", session_id: sessionId, transaction: tx() });
+          if (generation === connectionGeneration) send({ janus: "keepalive", session_id: sessionId, transaction: tx() });
         }, 25000);
         return;
       }
-
       if (message.janus === "success" && sessionId && !handleId && message.data && message.data.id) {
         handleId = message.data.id;
-        send({
-          janus: "message",
-          session_id: sessionId,
-          handle_id: handleId,
-          transaction: tx(),
-          body: { request: "watch", id: streamId }
-        });
+        send({ janus: "message", session_id: sessionId, handle_id: handleId, transaction: tx(), body: { request: "watch", id: streamId } });
         return;
       }
-
       if (message.janus === "event" && message.jsep) {
-        handleOffer(sessionId, handleId, message.jsep).catch(function(error) {
+        handleOffer(sessionId, handleId, message.jsep, generation).catch(function(error) {
+          if (generation !== connectionGeneration) return;
           log("WebRTC negotiation failed", error);
-          scheduleReconnect("Playback could not start. Retrying...");
+          scheduleReconnect("Preview could not start. Retrying...", generation);
         });
         return;
       }
-
       if (message.janus === "event" && message.plugindata && message.plugindata.data && message.plugindata.data.error) {
-        showStatus("Stream unavailable: " + message.plugindata.data.error);
+        showStatus("Preview unavailable: " + message.plugindata.data.error);
         setTone("previewState", "bad", "Unavailable");
         return;
       }
-
       if (message.janus === "hangup" || message.janus === "detached") {
-        scheduleReconnect("Stream ended. Reconnecting...");
+        scheduleReconnect("Preview ended. Reconnecting...", generation);
         return;
       }
-
       if (message.janus === "error") {
-        showStatus("Error: " + (message.error ? message.error.reason : "Unknown error"));
+        showStatus("Preview error: " + (message.error ? message.error.reason : "Unknown error"));
         setTone("previewState", "bad", "Error");
       }
     };
   }
 
-  async function handleOffer(sessionId, handleId, jsep) {
-    showStatus("Starting playback...");
-    pc = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
-
-    pc.onicecandidate = function(event) {
-      send({
-        janus: "trickle",
-        session_id: sessionId,
-        handle_id: handleId,
-        transaction: tx(),
-        candidate: event.candidate ? event.candidate.toJSON() : { completed: true }
-      });
+  async function handleOffer(sessionId, handleId, jsep, generation) {
+    showStatus("Starting channel " + streamId + " preview...");
+    var peer = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+    pc = peer;
+    peer.onicecandidate = function(event) {
+      if (generation !== connectionGeneration) return;
+      send({ janus: "trickle", session_id: sessionId, handle_id: handleId, transaction: tx(), candidate: event.candidate ? event.candidate.toJSON() : { completed: true } });
     };
-
-    pc.ontrack = function(event) {
+    peer.ontrack = function(event) {
+      if (generation !== connectionGeneration) return;
       if (video.srcObject !== event.streams[0]) video.srcObject = event.streams[0];
       video.play().then(hideOverlay).catch(function() {
-        showStatus("Click to start playback");
+        showStatus("Click to start browser preview");
         overlay.style.pointerEvents = "auto";
         overlay.style.cursor = "pointer";
         overlay.onclick = function() {
-          video.play().then(hideOverlay);
-          overlay.style.pointerEvents = "none";
+          video.play().then(hideOverlay).catch(function(error) { log("Preview play failed", error); });
         };
       });
     };
-
-    pc.onconnectionstatechange = function() {
-      if (!pc) return;
-      if (pc.connectionState === "connected") {
-        setTone("previewState", "good", "Connected");
-        setTone("outputState", "warn", "Waiting");
-      } else if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        scheduleReconnect("Connection lost. Reconnecting...");
-      }
+    peer.onconnectionstatechange = function() {
+      if (generation !== connectionGeneration) return;
+      if (peer.connectionState === "connected") setTone("previewState", "good", "Connected");
+      else if (peer.connectionState === "failed" || peer.connectionState === "disconnected") scheduleReconnect("Preview connection lost. Reconnecting...", generation);
     };
-
-    await pc.setRemoteDescription(new RTCSessionDescription(jsep));
-    var answer = await pc.createAnswer();
-    await pc.setLocalDescription(answer);
-    send({
-      janus: "message",
-      session_id: sessionId,
-      handle_id: handleId,
-      transaction: tx(),
-      body: { request: "start" },
-      jsep: { type: pc.localDescription.type, sdp: pc.localDescription.sdp }
-    });
+    await peer.setRemoteDescription(new RTCSessionDescription(jsep));
+    var answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);
+    if (generation !== connectionGeneration) return;
+    send({ janus: "message", session_id: sessionId, handle_id: handleId, transaction: tx(), body: { request: "start" }, jsep: { type: peer.localDescription.type, sdp: peer.localDescription.sdp } });
   }
 
   async function collectRtcStats() {
-    if (!pc || pc.connectionState === "closed") return;
-
+    if (!previewEnabled || !pc || pc.connectionState === "closed") return;
     try {
       var reports = await pc.getStats();
       var reportMap = new Map();
       var videoInbound = null;
       var audioInbound = null;
       var selectedPair = null;
-
       reports.forEach(function(report) {
         reportMap.set(report.id, report);
         if (report.type === "inbound-rtp" && !report.isRemote) {
@@ -1222,13 +1454,9 @@
           if ((report.kind || report.mediaType) === "audio") audioInbound = report;
         }
       });
-
       reports.forEach(function(report) {
-        if (report.type === "transport" && report.selectedCandidatePairId) {
-          selectedPair = reportMap.get(report.selectedCandidatePairId) || selectedPair;
-        } else if (!selectedPair && report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) {
-          selectedPair = report;
-        }
+        if (report.type === "transport" && report.selectedCandidatePairId) selectedPair = reportMap.get(report.selectedCandidatePairId) || selectedPair;
+        else if (!selectedPair && report.type === "candidate-pair" && report.state === "succeeded" && report.nominated) selectedPair = report;
       });
 
       function sampleInbound(report) {
@@ -1237,95 +1465,151 @@
         previousRtc[report.id] = {
           bytes: report.bytesReceived,
           timestamp: report.timestamp,
-          packetsLost: report.packetsLost || 0,
-          packetsReceived: report.packetsReceived || 0
+          packetsLost: Number.isFinite(report.packetsLost) ? report.packetsLost : null,
+          packetsReceived: Number.isFinite(report.packetsReceived) ? report.packetsReceived : null
         };
         if (!previous || report.timestamp <= previous.timestamp) return { bitrate: null, lost: null, received: null };
-        var bits = (report.bytesReceived - previous.bytes) * 8;
         return {
-          bitrate: bits * 1000 / (report.timestamp - previous.timestamp),
-          lost: Math.max(0, (report.packetsLost || 0) - previous.packetsLost),
-          received: Math.max(0, (report.packetsReceived || 0) - previous.packetsReceived)
+          bitrate: (report.bytesReceived - previous.bytes) * 8000 / (report.timestamp - previous.timestamp),
+          lost: Number.isFinite(report.packetsLost) && Number.isFinite(previous.packetsLost) ? Math.max(0, report.packetsLost - previous.packetsLost) : null,
+          received: Number.isFinite(report.packetsReceived) && Number.isFinite(previous.packetsReceived) ? Math.max(0, report.packetsReceived - previous.packetsReceived) : null
         };
       }
 
       var videoSample = sampleInbound(videoInbound);
       var audioSample = sampleInbound(audioInbound);
-      var videoBitrate = videoSample.bitrate;
-      var audioBitrate = audioSample.bitrate;
-      if ((videoBitrate || 0) + (audioBitrate || 0) > 0) lastMediaAt = Date.now();
+      var bitrates = [videoSample.bitrate, audioSample.bitrate].filter(Number.isFinite);
+      var totalBitrate = bitrates.length ? bitrates.reduce(function(total, value) { return total + value; }, 0) : null;
+      if (totalBitrate !== null && totalBitrate > 0) lastMediaAt = Date.now();
       var receiving = Date.now() - lastMediaAt < 3000;
-
       if (videoInbound) {
-        var dimensions = videoInbound.frameWidth && videoInbound.frameHeight ? videoInbound.frameWidth + "x" + videoInbound.frameHeight : "Video";
+        var dimensions = isPresent(videoInbound.frameWidth) && isPresent(videoInbound.frameHeight) ? videoInbound.frameWidth + "×" + videoInbound.frameHeight : "Video";
         var fps = Number.isFinite(videoInbound.framesPerSecond) ? " · " + Math.round(videoInbound.framesPerSecond) + " fps" : "";
-        setText("videoOutput", dimensions + fps + " · " + formatBitrate(videoBitrate));
-        var videoCodec = reportMap.get(videoInbound.codecId);
-        setText("videoCodec", videoCodec && videoCodec.mimeType ? videoCodec.mimeType.replace("video/", "") : "--");
+        setText("previewVideo", dimensions + fps);
       }
-
-      setText("audioOutput", audioInbound ? formatBitrate(audioBitrate) : (latestStatus && !latestStatus.input.audioEnabled ? "Disabled" : "--"));
-      var intervalLost = (videoSample.lost || 0) + (audioSample.lost || 0);
-      var intervalReceived = (videoSample.received || 0) + (audioSample.received || 0);
-      var intervalPackets = intervalLost + intervalReceived;
-      var cumulativeLost = (videoInbound ? videoInbound.packetsLost || 0 : 0) + (audioInbound ? audioInbound.packetsLost || 0 : 0);
-      var jitter = Math.max(videoInbound ? videoInbound.jitter || 0 : 0, audioInbound ? audioInbound.jitter || 0 : 0) * 1000;
-      setText("networkQuality", intervalPackets ? (intervalLost * 100 / intervalPackets).toFixed(2) + "% · " + jitter.toFixed(1) + " ms" : "Collecting · " + jitter.toFixed(1) + " ms");
-      byId("networkQuality").title = cumulativeLost + " cumulative RTP packets reported lost in this WebRTC session";
-      if (videoInbound) {
-        var decodedFrames = videoInbound.framesDecoded || 0;
-        var droppedFrames = videoInbound.framesDropped || 0;
-        setText("frameQuality", decodedFrames.toLocaleString() + " / " + droppedFrames.toLocaleString());
-      }
-
+      setText("previewRate", formatBitrate(totalBitrate));
+      var lostValues = [videoSample.lost, audioSample.lost].filter(Number.isFinite);
+      var receivedValues = [videoSample.received, audioSample.received].filter(Number.isFinite);
+      var lost = lostValues.length ? lostValues.reduce(function(total, value) { return total + value; }, 0) : null;
+      var received = receivedValues.length ? receivedValues.reduce(function(total, value) { return total + value; }, 0) : null;
+      var jitters = [videoInbound && videoInbound.jitter, audioInbound && audioInbound.jitter].filter(Number.isFinite);
+      var jitter = jitters.length ? Math.max.apply(Math, jitters) * 1000 : null;
+      var loss = lost !== null && received !== null && lost + received > 0 ? (lost * 100 / (lost + received)).toFixed(2) + "% loss" : "Loss " + DASH;
+      setText("previewNetwork", loss + " · " + (jitter === null ? DASH : jitter.toFixed(1) + " ms jitter"));
       if (selectedPair) {
         var local = reportMap.get(selectedPair.localCandidateId);
         var remote = reportMap.get(selectedPair.remoteCandidateId);
         var protocol = local && local.protocol ? " / " + local.protocol.toUpperCase() : "";
-        setText("networkPath", formatCandidate(local) + " → " + formatCandidate(remote) + protocol);
+        setText("previewPath", formatCandidate(local) + " → " + formatCandidate(remote) + protocol);
       }
-
-      if (pc.connectionState === "connected") {
-        setTone("outputState", receiving ? "good" : "warn", receiving ? "Live" : "Waiting");
-        setTone("previewState", receiving ? "good" : "warn", receiving ? "Live" : "Connected");
-        setText("outputSummaryDetail", receiving ? "Media received by this browser" : "Connected, waiting for media");
-      }
+      if (pc && pc.connectionState === "connected") setTone("previewState", receiving ? "good" : "warn", receiving ? "Live preview" : "Waiting for media");
     } catch (error) {
-      log("WebRTC stats unavailable", error);
+      log("WebRTC preview stats unavailable", error);
     }
   }
 
   function cleanupConnection() {
+    connectionGeneration++;
     if (keepAlive) { clearInterval(keepAlive); keepAlive = null; }
+    if (ws && ws.readyState === WebSocket.OPEN && activeSessionId) {
+      try {
+        ws.send(JSON.stringify({ janus: "destroy", session_id: activeSessionId, transaction: tx() }));
+      } catch (error) {
+        log("Could not destroy the preview session cleanly", error);
+      }
+    }
     if (pc) { pc.close(); pc = null; }
-    if (ws && ws.readyState < WebSocket.CLOSING) { ws.onclose = null; ws.close(); }
+    if (ws) {
+      ws.onclose = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      if (ws.readyState < WebSocket.CLOSING) ws.close();
+    }
     ws = null;
+    activeSessionId = null;
+    video.pause();
+    if (video.srcObject) video.srcObject = null;
     previousRtc = Object.create(null);
     lastMediaAt = 0;
-    setText("videoOutput", "--");
-    setText("videoCodec", "--");
-    setText("audioOutput", "--");
-    setText("networkQuality", "--");
-    setText("frameQuality", "--");
-    setText("networkPath", "--");
+    ["previewVideo", "previewRate", "previewNetwork", "previewPath"].forEach(function(id) { setText(id, null); });
+  }
+  function restartPreview(message) {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    cleanupConnection();
+    if (!previewEnabled) {
+      showStatus("Browser preview is disabled");
+      setTone("previewState", "neutral", "Disabled");
+      return;
+    }
+    showStatus(message);
+    connect();
   }
 
-  byId("setupButton").addEventListener("click", openSetup);
-  byId("closeSetupButton").addEventListener("click", closeSetup);
-  byId("cancelSetupButton").addEventListener("click", closeSetup);
-  byId("setupForm").addEventListener("submit", saveSetup);
-  byId("clearPassphrase").addEventListener("change", function() {
-    byId("configPassphrase").disabled = this.checked;
-    if (this.checked) byId("configPassphrase").value = "";
-  });
-  document.querySelectorAll("[data-copy]").forEach(function(button) {
-    button.addEventListener("click", function() { copyEndpoint(button); });
-  });
+  function updatePreviewControl() {
+    byId("previewCard").dataset.previewEnabled = previewEnabled ? "true" : "false";
+    byId("previewToggle").textContent = previewEnabled ? "Disable preview" : "Enable preview";
+    byId("previewToggle").setAttribute("aria-pressed", previewEnabled ? "true" : "false");
+    setText("previewNote", previewEnabled ? "Viewer-local WebRTC preview, not server aggregate telemetry" : "Preview connection and browser media processing are stopped");
+  }
 
-  fetchStatus();
+  function setPreviewEnabled(enabled) {
+    previewEnabled = enabled;
+    try {
+      window.localStorage.setItem(PREVIEW_STORAGE_KEY, previewEnabled ? "true" : "false");
+    } catch (error) {
+      log("Could not save the preview preference", error);
+    }
+    updatePreviewControl();
+    if (previewEnabled) {
+      if (!rtcStatsTimer) rtcStatsTimer = setInterval(collectRtcStats, 1000);
+      restartPreview("Connecting browser preview...");
+    } else {
+      if (rtcStatsTimer) { clearInterval(rtcStatsTimer); rtcStatsTimer = null; }
+      restartPreview("");
+    }
+  }
+
+  byId("setupButton").addEventListener("click", openGlobalSetup);
+  byId("previewToggle").addEventListener("click", function() { setPreviewEnabled(!previewEnabled); });
+  byId("closeChannelButton").addEventListener("click", closeChannelSetup);
+  byId("cancelChannelButton").addEventListener("click", closeChannelSetup);
+  byId("channelForm").addEventListener("submit", saveChannelSetup);
+  byId("closeGlobalButton").addEventListener("click", closeGlobalSetup);
+  byId("cancelGlobalButton").addEventListener("click", closeGlobalSetup);
+  byId("globalForm").addEventListener("submit", saveGlobalSetup);
+  byId("passphraseAction").addEventListener("change", updatePassphraseControl);
+  document.querySelectorAll("[data-copy]").forEach(function(button) { button.addEventListener("click", function() { copyEndpoint(button); }); });
+  document.querySelectorAll("[data-channel-config]").forEach(function(button) {
+    button.addEventListener("click", function() { openChannelSetup(parseInt(button.dataset.channelConfig, 10)); });
+  });
+  document.querySelectorAll("[data-channel-id]").forEach(function(button) {
+    button.addEventListener("click", function() { selectChannel(parseInt(button.dataset.channelId, 10)); });
+    button.addEventListener("keydown", function(event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
+      event.preventDefault();
+      var next = selectedChannelId;
+      if (event.key === "ArrowLeft") next = selectedChannelId === 1 ? CHANNEL_COUNT : selectedChannelId - 1;
+      if (event.key === "ArrowRight") next = selectedChannelId === CHANNEL_COUNT ? 1 : selectedChannelId + 1;
+      if (event.key === "Home") next = 1;
+      if (event.key === "End") next = CHANNEL_COUNT;
+      selectChannel(next);
+      byId("channelTab" + next).focus();
+    });
+  });
+  byId("channelDialog").addEventListener("cancel", function(event) { event.preventDefault(); closeChannelSetup(); });
+  byId("globalDialog").addEventListener("cancel", function(event) { event.preventDefault(); closeGlobalSetup(); });
+
+  renderSelectedChannel();
+  Promise.allSettled([fetchConfig(), fetchStatus()]);
   setInterval(fetchStatus, 2000);
-  setInterval(collectRtcStats, 1000);
-  connect();
+  setInterval(updateFreshness, 1000);
+  updatePreviewControl();
+  if (previewEnabled) {
+    rtcStatsTimer = setInterval(collectRtcStats, 1000);
+    connect();
+  } else {
+    restartPreview("");
+  }
 })();
 </script>
 </body>

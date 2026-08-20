@@ -6,11 +6,8 @@ services:
       target: runtime
     ports:
       - "8088:8088/tcp"
-      - "${VIDEO_PORT:-5004}:${VIDEO_PORT:-5004}/udp"
-      - "${AUDIO_PORT:-5005}:${AUDIO_PORT:-5005}/udp"
-      - "${VIDEO_RTCP_PORT:-5006}:${VIDEO_RTCP_PORT:-5006}/udp"
-      - "${AUDIO_RTCP_PORT:-5007}:${AUDIO_RTCP_PORT:-5007}/udp"
-      - "${SRT_PORT:-9000}:${SRT_PORT:-9000}/udp"
+      - "5004-5023:5004-5023/udp"
+      - "9000-9004:9000-9004/udp"
       - "20000-20100:20000-20100/udp"
     environment:
       INPUT_MODE: ${INPUT_MODE:-auto}

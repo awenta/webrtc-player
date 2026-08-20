@@ -8,6 +8,7 @@ general: {
 	debug_level = 4
 	debug_colors = false
 	server_name = "janus-webrtc-player"
+	admin_secret = "__JANUS_ADMIN_SECRET__"
 	exit_on_dl_error = true
 }
 
@@ -34,7 +35,7 @@ plugins: {
 
 transports: {
 	# Nginx owns port 8088; only the loopback WebSocket transport is needed.
-	disable = "libjanus_http.so,libjanus_pfunix.so,libjanus_nanomsg.so,libjanus_mqtt.so,libjanus_rabbitmq.so"
+	disable = "libjanus_pfunix.so,libjanus_nanomsg.so,libjanus_mqtt.so,libjanus_rabbitmq.so"
 }
 
 events: {

@@ -6,8 +6,6 @@ readonly REQUEST_FILE=/run/webrtc-player/config-apply.request
 readonly PROCESSING_FILE=/run/webrtc-player/config-apply.processing
 readonly RESULT_FILE=/run/webrtc-player/config-apply.result
 readonly S6_SVC=/package/admin/s6/command/s6-svc
-readonly SERVICES=(stats srt-relay input-selector janus)
-
 publish_result() {
     local generation="$1" status="$2"
     local temporary="${RESULT_FILE}.tmp"
@@ -26,24 +24,46 @@ while true; do
         sleep 0.1
         continue
     fi
-    IFS= read -r generation <"${PROCESSING_FILE}" || generation=unknown
-    echo "[config] applying generation ${generation}"
-
-    for service in "${SERVICES[@]}"; do
-        "${S6_SVC}" -d "/run/service/${service}" || true
-    done
-    sleep 1
-
-    if /etc/cont-init.d/10-configure; then
-        publish_result "${generation}" ok
-        echo "[config] generation ${generation} applied"
-    else
+    generation=unknown
+    channel=
+    global_changed=false
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            generation) generation="${value}" ;;
+            channel) channel="${value}" ;;
+            global) global_changed="${value}" ;;
+        esac
+    done <"${PROCESSING_FILE}"
+    if [[ ! "${channel}" =~ ^[0-5]$ || ( "${channel}" == 0 && "${global_changed}" != true ) ]]; then
         publish_result "${generation}" error
-        echo "[config] generation ${generation} failed validation" >&2
+        echo "[config] invalid channel in generation ${generation}" >&2
+        rm -f "${PROCESSING_FILE}"
+        continue
+    fi
+    if [[ "${channel}" == 0 ]]; then
+        echo "[config] applying global generation ${generation}"
+    else
+        echo "[config] applying generation ${generation} to channel ${channel}"
+        selector_service="input-selector-${channel}"
+        relay_service="srt-relay-${channel}"
+        "${S6_SVC}" -d "/run/service/${selector_service}"
+        "${S6_SVC}" -d "/run/service/${relay_service}"
     fi
 
-    for service in janus input-selector srt-relay stats; do
-        "${S6_SVC}" -u "/run/service/${service}" || true
-    done
+    apply_status=ok
+    if [[ "${global_changed}" == "true" ]]; then
+        "${S6_SVC}" -d /run/service/janus
+        if ! /etc/cont-init.d/10-configure; then
+            apply_status=error
+        fi
+        "${S6_SVC}" -u /run/service/janus
+    fi
+
+    if [[ "${channel}" != 0 ]]; then
+        "${S6_SVC}" -u "/run/service/${selector_service}"
+        "${S6_SVC}" -u "/run/service/${relay_service}"
+    fi
+    publish_result "${generation}" "${apply_status}"
+    echo "[config] generation ${generation} status=${apply_status}"
     rm -f "${PROCESSING_FILE}"
 done

@@ -284,7 +284,7 @@ static void write_status(const char *status_path, enum source_id active_source, 
 
 int main(void) {
     const char *mode = getenv("INPUT_MODE");
-    const char *status_path = "/run/webrtc-player/input-selector.status";
+    const char *status_path = getenv("SELECTOR_STATUS_PATH");
     const char *passphrase = getenv("SRT_PASSPHRASE");
     const char *passphrase_file = getenv("SRT_PASSPHRASE_FILE");
     bool direct_enabled;
@@ -328,6 +328,9 @@ int main(void) {
     unsigned int remote_port = 0;
     uint8_t packet[65536];
 
+    if (status_path == NULL || *status_path == '\0') {
+        status_path = "/run/webrtc-player/input-selector.status";
+    }
     if (mode == NULL || *mode == '\0') {
         mode = "auto";
     }

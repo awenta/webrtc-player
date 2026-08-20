@@ -198,12 +198,16 @@ RUN curl -fsSLo /tmp/nginx.tar.gz "https://nginx.org/download/nginx-${NGINX_VERS
 
 COPY native/input-selector.c /tmp/input-selector.c
 COPY native/config-api.c /tmp/config-api.c
+COPY native/janus-monitor.c /tmp/janus-monitor.c
 RUN cc -O2 -pipe -Wall -Wextra -Werror -std=c11 -pthread \
         /tmp/input-selector.c -o /opt/input-selector \
     && cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
         /tmp/config-api.c -o /opt/config-api \
-    && strip /opt/input-selector /opt/config-api \
-    && rm -f /tmp/input-selector.c /tmp/config-api.c
+    && cc -O2 -pipe -Wall -Wextra -Werror -std=c11 \
+        /tmp/janus-monitor.c -o /opt/janus-monitor \
+        $(pkg-config --cflags --libs libcurl jansson) \
+    && strip /opt/input-selector /opt/config-api /opt/janus-monitor \
+    && rm -f /tmp/input-selector.c /tmp/config-api.c /tmp/janus-monitor.c
 
 # Collect only the shared libraries required by runtime binaries and plugins.
 # They are flattened into a private directory to avoid merged-/usr symlink
@@ -234,6 +238,7 @@ COPY --from=builder /opt/janus/ /opt/janus/
 COPY --from=builder /opt/nginx/ /opt/nginx/
 COPY --from=builder /opt/input-selector /usr/local/bin/input-selector
 COPY --from=builder /opt/config-api /usr/local/bin/config-api
+COPY --from=builder /opt/janus-monitor /usr/local/bin/janus-monitor
 
 RUN printf 'player:x:10001:\n' >>/etc/group \
     && printf 'player:x:10001:10001:WebRTC Player:/nonexistent:/usr/sbin/nologin\n' >>/etc/passwd \
@@ -251,6 +256,14 @@ RUN chmod 0755 \
         /usr/local/bin/*.sh \
         /etc/services.d/*/run \
         /etc/services.d/*/finish \
+    && rm -rf /etc/services.d/input-selector /etc/services.d/srt-relay \
+    && for channel in 1 2 3 4 5; do \
+        mkdir -p "/etc/services.d/input-selector-${channel}" "/etc/services.d/srt-relay-${channel}"; \
+        ln -s /usr/local/bin/run-channel-selector.sh "/etc/services.d/input-selector-${channel}/run"; \
+        ln -s /usr/local/bin/finish-channel-service.sh "/etc/services.d/input-selector-${channel}/finish"; \
+        ln -s /usr/local/bin/run-channel-relay.sh "/etc/services.d/srt-relay-${channel}/run"; \
+        ln -s /usr/local/bin/finish-channel-service.sh "/etc/services.d/srt-relay-${channel}/finish"; \
+    done \
     && chown -R player:player /var/www/html
 
 ENV INPUT_MODE=auto \
@@ -282,7 +295,7 @@ ENV INPUT_MODE=auto \
     S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
     S6_CMD_WAIT_FOR_SERVICES_MAXTIME=30000
 
-EXPOSE 8088/tcp 5004/udp 5005/udp 5006/udp 5007/udp 9000/udp 20000-20100/udp
+EXPOSE 8088/tcp 5004-5023/udp 9000-9004/udp 20000-20100/udp
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
     CMD ["/usr/local/bin/healthcheck.sh"]

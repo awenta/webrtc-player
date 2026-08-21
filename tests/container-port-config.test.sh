@@ -6,7 +6,19 @@ host_container=webrtc-player-port-test
 bridge_container=webrtc-player-port-bridge-test
 
 cleanup() {
+    local status=$? container
+    if (( status != 0 )); then
+        for container in "${host_container}" "${bridge_container}"; do
+            if docker inspect "${container}" >/dev/null 2>&1; then
+                printf '\n--- %s state ---\n' "${container}" >&2
+                docker inspect "${container}" --format '{{json .State}}' >&2 || true
+                printf '%s\n' "--- ${container} logs ---" >&2
+                docker logs --tail 300 "${container}" >&2 || true
+            fi
+        done
+    fi
     docker rm -f "${host_container}" "${bridge_container}" >/dev/null 2>&1 || true
+    return "${status}"
 }
 trap cleanup EXIT
 cleanup

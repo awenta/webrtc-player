@@ -157,8 +157,9 @@ IFS=$'\t' read -r WEBRTC_INTERFACE_NAME WEBRTC_IP <<<"${webrtc_resolution}"
 umask 0027
 network_json_tmp=$(mktemp "${NETWORK_JSON}.tmp.XXXXXX")
 network_env_tmp=$(mktemp "${NETWORK_ENV}.tmp.XXXXXX")
+janus_secret_tmp=
 cleanup_network_temps() {
-    rm -f "${network_json_tmp:-}" "${network_env_tmp:-}"
+    rm -f "${network_json_tmp:-}" "${network_env_tmp:-}" "${janus_secret_tmp:-}"
 }
 trap cleanup_network_temps EXIT
 /usr/local/bin/network-info json "${NETWORK_MODE}" "${MANAGEMENT_INTERFACE}" \
@@ -215,7 +216,12 @@ sed \
     /etc/webrtc-player/janus/janus.jcfg >"${CONFIG_DIR}/janus.jcfg"
 cp /etc/webrtc-player/janus/janus.transport.websockets.jcfg "${CONFIG_DIR}/janus.transport.websockets.jcfg"
 cp /etc/webrtc-player/janus/janus.transport.http.jcfg "${CONFIG_DIR}/janus.transport.http.jcfg"
-printf '%s\n' "${JANUS_ADMIN_SECRET}" >/run/webrtc-player/janus-admin.secret
+janus_secret_tmp=$(mktemp /run/webrtc-player/janus-admin.secret.tmp.XXXXXX)
+printf '%s\n' "${JANUS_ADMIN_SECRET}" >"${janus_secret_tmp}"
+chown player:player "${janus_secret_tmp}"
+chmod 0600 "${janus_secret_tmp}"
+mv -f "${janus_secret_tmp}" /run/webrtc-player/janus-admin.secret
+janus_secret_tmp=
 
 cat >"${CONFIG_DIR}/janus.plugin.streaming.jcfg" <<EOF
 general: {
@@ -277,6 +283,4 @@ done
 chown -R player:player "${CONFIG_DIR}" "${CHANNEL_RUNTIME_ROOT}"
 chown root:player /run/webrtc-player
 chmod 1770 /run/webrtc-player
-chown player:player /run/webrtc-player/janus-admin.secret
-chmod 0600 /run/webrtc-player/janus-admin.secret
 chmod 0640 "${CONFIG_DIR}"/*.jcfg

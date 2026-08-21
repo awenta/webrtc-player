@@ -3,7 +3,10 @@
 set -Eeuo pipefail
 
 # shellcheck source=scripts/load-settings.sh
-source /usr/local/bin/load-settings.sh
+load_settings_path=/usr/local/bin/load-settings.sh
+[[ -r ${load_settings_path} ]] || load_settings_path="$(dirname "${BASH_SOURCE[0]}")/load-settings.sh"
+source "${load_settings_path}"
+unset load_settings_path
 
 readonly REQUEST_FILE=/run/webrtc-player/config-apply.request
 readonly PROCESSING_FILE=/run/webrtc-player/config-apply.processing
@@ -86,7 +89,7 @@ process_is_stably_running() {
 }
 
 prepare_channel_readiness() {
-    local channel_id="$1" port_name port srt_mode srt_host direct_expected=false srt_listener_verified=false
+    local channel_id="$1" port_name port srt_mode direct_expected=false
     local -a expected=()
     local -A seen_ports=()
 
@@ -127,14 +130,12 @@ prepare_channel_readiness() {
         fi
         seen_ports["${port}"]=1
     done
-    srt_host=
     srt_mode=caller
     if [[ ${SRT_URL_VALID} == true ]]; then
         if ! _load_settings_parse_srt_url "${SRT_URL}"; then
             READY_REASON="channel ${channel_id} SRT_URL is invalid"
             return 1
         fi
-        srt_host=${REPLY_HOST}
         srt_mode=${REPLY_MODE}
     fi
     EXPECTED_IPV4_LISTENERS["${channel_id}"]=
@@ -159,17 +160,10 @@ prepare_channel_readiness() {
             expected+=("${INGEST_IP},${AUDIO_PORT}" "${INGEST_IP},${AUDIO_RTCP_PORT}")
         fi
     fi
-    # Hostnames and IPv6 listeners use the stable FFmpeg PID check because the
-    # resolved local address cannot be matched reliably in /proc/net/udp.
+    # libsrt sockets are not represented consistently in /proc/net/udp across
+    # kernels. A stable FFmpeg PID proves that listener setup did not fail.
     if [[ ( ${INPUT_MODE} == auto || ${INPUT_MODE} == srt ) && ${srt_mode} != caller ]]; then
-        if [[ ${srt_host} == 0.0.0.0 ]]; then
-            expected+=("${INGEST_IP},${SRT_PORT}")
-            srt_listener_verified=true
-        elif _load_settings_valid_ipv4 "${srt_host}"; then
-            expected+=("${srt_host},${SRT_PORT}")
-            srt_listener_verified=true
-        fi
-        [[ ${srt_listener_verified} == true ]] || REQUIRE_FULL_READINESS["${channel_id}"]=true
+        REQUIRE_FULL_READINESS["${channel_id}"]=true
     fi
     EXPECTED_IPV4_LISTENERS["${channel_id}"]="${expected[*]}"
 }
@@ -236,6 +230,10 @@ wait_for_channels() {
     done
     return 1
 }
+
+if [[ ${BASH_SOURCE[0]} != "$0" ]]; then
+    return 0
+fi
 
 while true; do
     if [[ ! -f "${REQUEST_FILE}" ]]; then

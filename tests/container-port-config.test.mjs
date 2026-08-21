@@ -58,6 +58,20 @@ async function postChannel(channel, overrides, expectedStatus = 200) {
   return result.body;
 }
 
+async function postGlobal(config, overrides = {}) {
+  const body = new URLSearchParams({ ...config.global, ...overrides, scope: "global" });
+  const result = await request("/api/config", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      "X-Requested-With": "WebRTC-Player"
+    },
+    body
+  });
+  assert.equal(result.response.status, 200, JSON.stringify(result.body));
+  return result.body;
+}
+
 const initial = await waitForConfig();
 assert.equal(initial.version, 3);
 assert.equal(initial.network.mode, expectedMode);
@@ -73,20 +87,20 @@ if (expectedMode === "bridge") {
     AUDIO_PORT: "6101",
     VIDEO_RTCP_PORT: "6102",
     AUDIO_RTCP_PORT: "6103",
-    SRT_URL: "srt://0.0.0.0:9100?mode=listener&latency=120000"
+    SRT_URL: "srt://0.0.0.0:18000?mode=listener&latency=120000"
   });
 
   const updated = await waitForConfig();
   const updatedChannel1 = updated.channels.find((channel) => channel.id === 1);
   assert.equal(updatedChannel1.values.VIDEO_PORT, "6100");
   assert.equal(updatedChannel1.values.AUDIO_RTCP_PORT, "6103");
-  assert.equal(updatedChannel1.values.SRT_URL, "srt://0.0.0.0:9100?mode=listener&latency=120000");
+  assert.equal(updatedChannel1.values.SRT_URL, "srt://0.0.0.0:18000?mode=listener&latency=120000");
 
   for (let attempt = 0; attempt < 10; attempt++) {
     const status = await request("/api/status");
     if (status.response.ok) {
       const statusChannel = status.body.channels.find((channel) => channel.id === 1);
-      if (statusChannel.input.videoRtpPort === 6100 && statusChannel.input.srtPort === 9100) break;
+      if (statusChannel.input.videoRtpPort === 6100 && statusChannel.input.srtPort === 18000) break;
     }
     if (attempt === 9) throw new Error("runtime status did not report the configured ports");
     await new Promise((resolve) => setTimeout(resolve, 500));
@@ -102,6 +116,12 @@ if (expectedMode === "bridge") {
   await postChannel(legacyChannel, { CHANNEL_NAME: "Disabled legacy channel" });
   const legacyStatus = await request("/api/status");
   assert.equal(legacyStatus.response.status, 200, JSON.stringify(legacyStatus.body));
+
+  const ingestInterface = updated.network.effective.ingest.name;
+  await postGlobal(updated, { INGEST_INTERFACE: ingestInterface });
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  const globalUpdate = await waitForConfig();
+  assert.equal(globalUpdate.global.INGEST_INTERFACE, ingestInterface);
 
   if (process.env.WEBRTC_PLAYER_TEST_OCCUPIED_PORT === "true") {
     const rollback = await postChannel(updatedChannel1, {

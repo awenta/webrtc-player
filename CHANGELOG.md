@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Fix false channel and interface apply failures when libsrt listeners are absent from `/proc/net/udp`.
+- Keep status telemetry running in native host-network deployments where the container hostname does not resolve.
 - Allow guarded per-channel SRT and direct RTP/RTCP listener port configuration from the dashboard in host-network deployments.
 - Automatically bind management, ingest, and WebRTC roles to the primary IPv4 interface with independent UI overrides for multi-interface Linux hosts.
 - Publish versioned `linux/amd64` images to GHCR and provide a pull-based deployment Compose file.

@@ -15,7 +15,7 @@ cpu_count=$(getconf _NPROCESSORS_ONLN 2>/dev/null || printf '1')
 page_size=$(getconf PAGESIZE 2>/dev/null || printf '4096')
 page_kib=$((page_size / 1024))
 container_ip=""
-read -r container_ip _ < <(getent ahostsv4 "${HOSTNAME:-localhost}" 2>/dev/null || true)
+read -r container_ip _ < <(getent ahostsv4 "${HOSTNAME:-localhost}" 2>/dev/null || true) || container_ip=""
 
 json_quote() {
     local value="$1"

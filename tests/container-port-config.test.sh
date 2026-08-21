@@ -12,6 +12,7 @@ trap cleanup EXIT
 cleanup
 
 docker run -d --name "${host_container}" -e NETWORK_MODE=host \
+    -e HOSTNAME=webrtc-player-unresolvable.invalid \
     -p 18088:8088/tcp "${image}" >/dev/null
 WEBRTC_PLAYER_TEST_URL=http://127.0.0.1:18088 \
     WEBRTC_PLAYER_TEST_MODE=host \

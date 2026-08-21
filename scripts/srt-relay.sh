@@ -55,13 +55,18 @@ port_count="$(printf '%s\n' "${VIDEO_PORT}" "${AUDIO_PORT}" "${VIDEO_RTCP_PORT}"
 
 EFFECTIVE_SRT_URL=${SRT_URL}
 srt_query=
+srt_mode=caller
 if [[ "${SRT_URL}" == *\?* ]]; then
     srt_query=${SRT_URL#*\?}
 fi
-if [[ "${SRT_URL}" == srt://0.0.0.0:* && "&${srt_query}&" == *'&mode=listener&'* ]]; then
+IFS='&' read -r -a srt_options <<<"${srt_query}"
+for srt_option in "${srt_options[@]}"; do
+    [[ ${srt_option} == mode=* ]] && srt_mode=${srt_option#mode=}
+done
+if [[ "${SRT_URL}" == srt://0.0.0.0:* && ${srt_mode} != caller ]]; then
     [[ "${INGEST_IP:-}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] \
         || fail "INGEST_IP is unavailable for the wildcard SRT listener"
-    EFFECTIVE_SRT_URL="srt://${INGEST_IP}${SRT_URL#srt://0.0.0.0}"
+    EFFECTIVE_SRT_URL="srt://${INGEST_IP}${EFFECTIVE_SRT_URL#srt://0.0.0.0}"
 fi
 
 case "${VIDEO_PRESET}" in

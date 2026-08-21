@@ -42,6 +42,8 @@ Open <http://localhost:8088/?stream=1>, or embed it:
 
 The player begins muted to satisfy browser autoplay rules. Its native controls can enable audio. All five channels start enabled unless a persisted channel setting explicitly disables one.
 
+Default channel allocation:
+
 | Channel | Player | SRT listener | Direct RTP/RTCP |
 |---|---|---:|---:|
 | 1 | `?stream=1` | 9000 | 5004-5007 |
@@ -123,15 +125,15 @@ Select **Disable preview** to stop browser media processing without stopping the
 Select **Config** on a channel card to open all settings for that channel:
 
 - Automatic, RTP-only, or SRT-only input acceptance and source timeout
-- SRT listener/caller URL, expected audio, color handling, and optional encryption
+- SRT listener/caller/rendezvous URL, expected audio, color handling, and optional encryption
 - Transcode bitrate, x264 preset, maximum dimensions, and frame rate
-- Direct-RTP audio and the channel's fixed WebRTC/port allocation
+- Direct RTP/RTCP listener ports, direct-RTP audio, and the channel's fixed WebRTC allocation
 
 The top-level **Global settings** button contains the management, ingest, and WebRTC interface roles plus the optional public IP advertised by Janus. Each role defaults to the interface owning the IPv4 default route and can independently select another UP, non-loopback IPv4 interface. Applying channel settings validates and persists that channel, then briefly restarts only its selector and SRT relay. Applying global network settings regenerates the listeners and restarts Janus plus all selectors and SRT relays; Nginx restarts last so the current request can finish. The UI offers to redirect when the management address changes, and the browser reconnects automatically when its selected output is affected.
 
 Persisted UI settings take precedence over matching environment variables on later container starts; use `docker compose down -v` to remove them and return to environment/default values.
 
-Published HTTP, SRT, RTP/RTCP, and ICE ports are shown but remain read-only. The connection guide uses the effective ingest address for sender destinations and the current management address for player, WebSocket, and iframe URLs.
+In host-network deployments, each channel's direct RTP/RTCP ports and the listener port in `SRT_URL` are configurable from the dashboard. Port changes are validated across all channels and rejected when they overlap the fixed WebRTC ICE range. Bridge-mode listener ports remain read-only because the running container cannot rewrite Docker's host port publications. The connection guide uses the effective ingest address and ports for sender destinations and the current management address for player, WebSocket, and iframe URLs.
 
 The configuration endpoint is intentionally simple and has no user-account system. Do not expose it to untrusted networks without access control in the deployment reverse proxy.
 
@@ -156,6 +158,10 @@ The container's matching default input is:
 ```text
 srt://0.0.0.0:9000?mode=listener&latency=120000
 ```
+
+The authority port in `SRT_URL` is canonical. Change it in a channel's dashboard configuration when using host networking; status and connection instructions report that same effective port.
+
+Specify `mode=listener` for a local listener or `mode=rendezvous` when both peers use rendezvous mode. When `mode` is omitted, FFmpeg's caller default is preserved and the URL is treated as a remote destination.
 
 ## SRT Caller
 
@@ -219,7 +225,7 @@ When audio is enabled, a missing selected audio stream is treated as an input er
 
 ## Direct RTP Mode
 
-Automatic mode listens for direct RTP by default. Send:
+Automatic mode listens for direct RTP by default. With the default Channel 1 allocation, send:
 
 | Media | Destination | RTP payload |
 |---|---|---|
@@ -228,7 +234,7 @@ Automatic mode listens for direct RTP by default. Send:
 
 Optional RTCP sender reports use UDP 5006 for video and 5007 for audio. These ports are separate so video RTCP cannot collide with audio RTP.
 
-Channels 2-5 use the subsequent four-port blocks shown in the Quick Start table.
+Channels 2-5 default to the subsequent four-port blocks shown in the Quick Start table. Host-network deployments can assign all four ports independently in the channel dashboard.
 
 Set `AUDIO_ENABLED=false` for a video-only direct RTP mountpoint.
 
@@ -243,17 +249,17 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 | `INPUT_TIMEOUT_MS` | `5000` | Video silence before automatic mode releases the selected input |
 | `RTP_PACING_US` | `100` | Minimum spacing between video RTP packets forwarded to Janus (0-2000 microseconds) |
 | `STREAM_ID` | `1` | Positive Janus mountpoint ID |
-| `VIDEO_PORT` | `5004` | Internal/direct H.264 RTP port |
-| `AUDIO_PORT` | `5005` | Internal/direct Opus RTP port |
-| `VIDEO_RTCP_PORT` | `5006` | Internal/direct H.264 RTCP port |
-| `AUDIO_RTCP_PORT` | `5007` | Internal/direct Opus RTCP port |
+| `VIDEO_PORT` | `5004` | External direct H.264 RTP listener port for Channel 1 |
+| `AUDIO_PORT` | `5005` | External direct Opus RTP listener port for Channel 1 |
+| `VIDEO_RTCP_PORT` | `5006` | External direct H.264 RTCP listener port for Channel 1 |
+| `AUDIO_RTCP_PORT` | `5007` | External direct Opus RTCP listener port for Channel 1 |
 | `AUDIO_ENABLED` | `true` | Enable audio in direct RTP mode |
 | `NETWORK_MODE` | `bridge` | `bridge` for local Compose port publishing or `host` for direct Linux host interfaces |
 | `MANAGEMENT_INTERFACE` | `auto` | Interface for the UI/API listener; `auto` follows the IPv4 default route |
 | `INGEST_INTERFACE` | `auto` | Interface for direct RTP/RTCP and wildcard SRT listeners |
 | `WEBRTC_INTERFACE` | `auto` | Interface used for Janus ICE candidates and WebRTC media |
 | `PUBLIC_IP` | unset | Optional IPv4 address advertised for static one-to-one NAT |
-| `SRT_URL` | listener on `0.0.0.0:9000` | Complete listener or caller URL |
+| `SRT_URL` | listener on `0.0.0.0:9000` | Complete listener, caller, or rendezvous URL; omitted mode means caller |
 | `SRT_AUDIO` | `true` | Expect and transcode an SRT audio stream |
 | `SRT_COLOR_MODE` | `auto` | `auto`, `fast`, or `hdr-to-sdr` |
 | `VIDEO_BITRATE` | `6M` | H.264 target and maximum bitrate |
@@ -269,7 +275,7 @@ If direct RTP and SRT arrive together, the first validated video source is selec
 | `JANUS_ADMIN_KEY` | generated | Optional persistent Streaming plugin management key |
 | `STREAM_SECRET` | generated | Optional persistent mountpoint edit/destroy secret |
 
-`SRT_PORT` only controls the Docker Compose host-to-container port publication. Keep it consistent with the listener port in `SRT_URL`.
+The four direct ports and every local SRT listener port must be unique across all channels, use the unprivileged range `1024-65535`, and remain outside the fixed WebRTC ICE range `20000-20100`. `SRT_URL` is the only SRT port setting; there is no separate public-port override.
 
 Environment variables and legacy `/config/settings` values migrate to Channel 1. The UI stores independent records for all five channels under `/config/channels`.
 
@@ -314,10 +320,10 @@ Open `http://<primary-host-ip>:8088`, then use **Global settings** to place mana
 Host networking does not create Docker firewall rules. Apply host firewall policy to the selected role addresses:
 
 - Management interface: `8088/tcp`
-- Ingest interface: `9000-9004/udp` and `5004-5023/udp`
+- Ingest interface: each channel's configured local SRT and direct RTP/RTCP UDP ports (defaults `9000-9004` and `5004-5023`)
 - WebRTC interface: `20000-20100/udp`
 
-Loopback remains enabled for internal Nginx, Janus, and monitoring communication. Bridge-mode `docker-compose.yml` is intended for local development; it sees the container's `eth0`, and Docker's published ports provide host access rather than role isolation across host interfaces.
+Loopback remains enabled for internal Nginx, Janus, and monitoring communication. Bridge-mode `docker-compose.yml` is intended for local development; it sees the container's `eth0`, and Docker's fixed published ranges provide host access rather than role isolation across host interfaces. To use different ingest ports, deploy with `compose.deploy.yml` and host networking; the dashboard deliberately prevents misleading bridge-mode listener changes.
 
 ## NAT and Public Deployment
 
@@ -340,6 +346,18 @@ docker compose ps
 docker compose logs -f webrtc-player
 docker compose exec webrtc-player /opt/media/bin/ffmpeg -version
 docker compose exec webrtc-player /opt/janus/bin/janus --version
+```
+
+Run the port configuration regression tests on a Linux development host with Node.js and a C compiler:
+
+```bash
+bash tests/run.sh
+```
+
+After building `webrtc-player:port-config-test`, exercise host/bridge API application and occupied-port rollback with:
+
+```bash
+bash tests/container-port-config.test.sh webrtc-player:port-config-test
 ```
 
 ## Updating Dependencies

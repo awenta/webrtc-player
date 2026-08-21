@@ -99,6 +99,15 @@ static int read_number(const char *name, int fallback, int minimum, int maximum)
     return (int)value;
 }
 
+static bool read_boolean(const char *name, bool fallback) {
+    const char *raw = getenv(name);
+    if (raw == NULL || *raw == '\0') return fallback;
+    if (strcmp(raw, "true") == 0) return true;
+    if (strcmp(raw, "false") == 0) return false;
+    fprintf(stderr, "[input-selector] invalid %s\n", name);
+    exit(EXIT_FAILURE);
+}
+
 static const char *source_name(enum source_id source) {
     switch (source) {
         case SOURCE_DIRECT:
@@ -113,7 +122,6 @@ static const char *source_name(enum source_id source) {
 static int bind_input(int port, const struct in_addr *bind_address) {
     int fd = socket(AF_INET, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
     int receive_buffer = 4 * 1024 * 1024;
-    int reuse = 1;
     struct sockaddr_in address = {
         .sin_family = AF_INET,
         .sin_port = htons((uint16_t)port),
@@ -124,7 +132,6 @@ static int bind_input(int port, const struct in_addr *bind_address) {
         perror("[input-selector] socket");
         exit(EXIT_FAILURE);
     }
-    (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &receive_buffer, sizeof(receive_buffer));
     if (bind(fd, (const struct sockaddr *)&address, sizeof(address)) != 0) {
         fprintf(stderr, "[input-selector] cannot bind UDP port %d: %s\n", port, strerror(errno));
@@ -292,6 +299,7 @@ int main(void) {
     const struct in_addr loopback_address = {.s_addr = htonl(INADDR_LOOPBACK)};
     bool direct_enabled;
     bool srt_enabled;
+    bool audio_enabled = read_boolean("AUDIO_ENABLED", true);
     int direct_ports[CHANNEL_COUNT] = {
         read_number("VIDEO_PORT", 5004, 1024, 65535),
         read_number("AUDIO_PORT", 5005, 1024, 65535),
@@ -359,7 +367,7 @@ int main(void) {
         output_queue.outputs[channel].sin_family = AF_INET;
         output_queue.outputs[channel].sin_port = htons((uint16_t)janus_ports[channel]);
         output_queue.outputs[channel].sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-        if (direct_enabled) {
+        if (direct_enabled && (audio_enabled || (channel != AUDIO_RTP && channel != AUDIO_RTCP))) {
             inputs[input_count] = (struct input_socket){
                 .fd = bind_input(direct_ports[channel], &direct_bind_address),
                 .source = SOURCE_DIRECT,

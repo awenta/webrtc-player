@@ -13,6 +13,7 @@ if [[ $(declare -p _LOAD_SETTINGS_ORIGINAL 2>/dev/null) != declare\ -A* ||
     declare -gA _LOAD_SETTINGS_ORIGINAL_SET=()
     for _load_settings_name in \
         CHANNEL_NAME CHANNEL_ENABLED INPUT_MODE SRT_URL SRT_AUDIO AUDIO_ENABLED \
+        VIDEO_PORT AUDIO_PORT VIDEO_RTCP_PORT AUDIO_RTCP_PORT \
         SRT_COLOR_MODE VIDEO_PRESET VIDEO_BITRATE VIDEO_BUFFER_SIZE AUDIO_BITRATE MAX_WIDTH MAX_HEIGHT \
         MAX_FPS INPUT_TIMEOUT_MS SRT_PBKEYLEN SRT_PASSPHRASE PUBLIC_IP \
         MANAGEMENT_INTERFACE INGEST_INTERFACE WEBRTC_INTERFACE NETWORK_MODE \
@@ -55,7 +56,7 @@ _load_channel_file() {
         key=${line%%=*}
         value=${line#*=}
         case ${key} in
-            CHANNEL_NAME|CHANNEL_ENABLED|INPUT_MODE|SRT_URL|SRT_AUDIO|AUDIO_ENABLED|SRT_COLOR_MODE|VIDEO_PRESET|VIDEO_BITRATE|VIDEO_BUFFER_SIZE|AUDIO_BITRATE|MAX_WIDTH|MAX_HEIGHT|MAX_FPS|INPUT_TIMEOUT_MS|SRT_PBKEYLEN|SRT_PASSPHRASE)
+            CHANNEL_NAME|CHANNEL_ENABLED|INPUT_MODE|SRT_URL|SRT_AUDIO|AUDIO_ENABLED|VIDEO_PORT|AUDIO_PORT|VIDEO_RTCP_PORT|AUDIO_RTCP_PORT|SRT_COLOR_MODE|VIDEO_PRESET|VIDEO_BITRATE|VIDEO_BUFFER_SIZE|AUDIO_BITRATE|MAX_WIDTH|MAX_HEIGHT|MAX_FPS|INPUT_TIMEOUT_MS|SRT_PBKEYLEN|SRT_PASSPHRASE)
                 _LOAD_SETTINGS_CHANNEL_VALUES["${key}"]=${value}
                 ;;
         esac
@@ -69,6 +70,128 @@ _resolve_channel_setting() {
     else
         _load_channel_fallback "${channel_id}" "${name}" "${fallback}"
     fi
+}
+
+_load_settings_valid_ipv4() {
+    local address="$1" octet
+    local -a octets=()
+    IFS='.' read -r -a octets <<<"${address}"
+    (( ${#octets[@]} == 4 )) || return 1
+    for octet in "${octets[@]}"; do
+        [[ ${octet} =~ ^[0-9]{1,3}$ ]] || return 1
+        [[ ${octet} == 0 || ${octet} != 0* ]] || return 1
+        (( 10#${octet} <= 255 )) || return 1
+    done
+}
+
+_load_settings_valid_srt_hostname() {
+    local host="$1" character previous= label_length=0 numeric=true index
+    (( ${#host} >= 1 && ${#host} <= 253 )) || return 1
+    [[ ${host:0:1} =~ [A-Za-z0-9] && ${host: -1} =~ [A-Za-z0-9] ]] || return 1
+    for ((index = 0; index < ${#host}; index++)); do
+        character=${host:index:1}
+        if [[ ${character} == . ]]; then
+            (( label_length >= 1 && label_length <= 63 )) || return 1
+            [[ ${previous} != - ]] || return 1
+            label_length=0
+            previous=${character}
+            continue
+        fi
+        [[ ${character} =~ [A-Za-z0-9_-] ]] || return 1
+        [[ ${label_length} != 0 || ${character} != - ]] || return 1
+        [[ ${character} =~ [0-9] ]] || numeric=false
+        label_length=$((label_length + 1))
+        previous=${character}
+    done
+    (( label_length >= 1 && label_length <= 63 )) || return 1
+    if [[ ${numeric} == true ]]; then
+        _load_settings_valid_ipv4 "${host}"
+    fi
+}
+
+_load_settings_valid_ipv6() {
+    local address="$1" group ipv4 prefix compressed=false group_count=0
+    local -a groups=()
+    [[ ${address} == *:* && ${address} =~ ^[0-9A-Fa-f:.]+$ && ${address} != *:::* ]] || return 1
+    if [[ ${address} == *.* ]]; then
+        ipv4=${address##*:}
+        _load_settings_valid_ipv4 "${ipv4}" || return 1
+        prefix=${address%:*}
+        [[ ${prefix} != "${address}" ]] || return 1
+        address="${prefix}:0:0"
+    fi
+    if [[ ${address} == *::* ]]; then
+        [[ ${address#*::} != *::* ]] || return 1
+        compressed=true
+    else
+        [[ ${address} != :* && ${address} != *: ]] || return 1
+    fi
+    IFS=':' read -r -a groups <<<"${address}"
+    for group in "${groups[@]}"; do
+        [[ -n ${group} ]] || continue
+        [[ ${group} =~ ^[0-9A-Fa-f]{1,4}$ ]] || return 1
+        group_count=$((group_count + 1))
+    done
+    if [[ ${compressed} == true ]]; then
+        (( group_count < 8 ))
+    else
+        (( group_count == 8 ))
+    fi
+}
+
+_load_settings_parse_srt_url() {
+    local url="$1" rest authority query= host port port_number option key mode=caller mode_seen=false
+    local query_present=false
+    local -a options=()
+    REPLY=
+    REPLY_HOST=
+    REPLY_MODE=
+    [[ ${url} == srt://* && ${url} != *$'\r'* && ${url} != *$'\n'* && ${#url} -le 2048 ]] || return 1
+    rest=${url#srt://}
+    [[ ${rest} != *'#'* ]] || return 1
+    if [[ ${rest} == *\?* ]]; then
+        authority=${rest%%\?*}
+        query=${rest#*\?}
+        [[ ${query} != *\?* ]] || return 1
+        query_present=true
+    else
+        authority=${rest}
+    fi
+    [[ -n ${authority} && ${authority} != */* ]] || return 1
+
+    if [[ ${authority} == \[* ]]; then
+        host=${authority#\[}
+        [[ ${host} == *\]:* ]] || return 1
+        port=${host##*]:}
+        host=${host%]:*}
+        [[ -n ${host} && ${host} != *'['* && ${host} != *']'* ]] || return 1
+        _load_settings_valid_ipv6 "${host}" || return 1
+    else
+        [[ ${authority} == *:* && ${authority} != *:*:* ]] || return 1
+        host=${authority%:*}
+        port=${authority##*:}
+        _load_settings_valid_srt_hostname "${host}" || return 1
+    fi
+    [[ ${port} =~ ^[0-9]{1,5}$ && ( ${port} == 0 || ${port} != 0* ) ]] || return 1
+    port_number=$((10#${port}))
+    (( port_number >= 1024 && port_number <= 65535 )) || return 1
+
+    if [[ ${query_present} == true ]]; then
+        [[ -n ${query} && ${query} != \&* && ${query} != *\& && ${query} != *'&&'* ]] || return 1
+        IFS='&' read -r -a options <<<"${query}"
+        for option in "${options[@]}"; do
+            key=${option%%=*}
+            if [[ ${key} == mode ]]; then
+                [[ ${option} == *=* && ${mode_seen} == false ]] || return 1
+                mode=${option#*=}
+                [[ ${mode} == listener || ${mode} == caller || ${mode} == rendezvous ]] || return 1
+                mode_seen=true
+            fi
+        done
+    fi
+    REPLY=${port_number}
+    REPLY_HOST=${host}
+    REPLY_MODE=${mode}
 }
 
 load_global_settings() {
@@ -168,16 +291,16 @@ load_network_settings() {
 }
 
 load_channel_settings() {
-    local channel_id="$1" channel_name srt_url
-    local external_base relay_base janus_base srt_port
+    local channel_id="$1" channel_name srt_url srt_query
+    local external_base relay_base janus_base default_srt_port
 
     [[ ${channel_id} =~ ^[1-5]$ ]] || return 2
     external_base=$((5004 + 4 * (channel_id - 1)))
     relay_base=$((15004 + 4 * (channel_id - 1)))
     janus_base=$((25004 + 4 * (channel_id - 1)))
-    srt_port=$((9000 + channel_id - 1))
+    default_srt_port=$((9000 + channel_id - 1))
     channel_name="Channel ${channel_id}"
-    srt_url="srt://0.0.0.0:${srt_port}?mode=listener&latency=120000"
+    srt_url="srt://0.0.0.0:${default_srt_port}?mode=listener&latency=120000"
 
     _load_channel_file "${channel_id}"
 
@@ -187,6 +310,10 @@ load_channel_settings() {
     _resolve_channel_setting "${channel_id}" SRT_URL "${srt_url}"; SRT_URL=${REPLY}
     _resolve_channel_setting "${channel_id}" SRT_AUDIO true; SRT_AUDIO=${REPLY}
     _resolve_channel_setting "${channel_id}" AUDIO_ENABLED true; AUDIO_ENABLED=${REPLY}
+    _resolve_channel_setting "${channel_id}" VIDEO_PORT "${external_base}"; VIDEO_PORT=${REPLY}
+    _resolve_channel_setting "${channel_id}" AUDIO_PORT "$((external_base + 1))"; AUDIO_PORT=${REPLY}
+    _resolve_channel_setting "${channel_id}" VIDEO_RTCP_PORT "$((external_base + 2))"; VIDEO_RTCP_PORT=${REPLY}
+    _resolve_channel_setting "${channel_id}" AUDIO_RTCP_PORT "$((external_base + 3))"; AUDIO_RTCP_PORT=${REPLY}
     _resolve_channel_setting "${channel_id}" SRT_COLOR_MODE auto; SRT_COLOR_MODE=${REPLY}
     _resolve_channel_setting "${channel_id}" VIDEO_PRESET veryfast; VIDEO_PRESET=${REPLY}
     _resolve_channel_setting "${channel_id}" VIDEO_BITRATE 6M; VIDEO_BITRATE=${REPLY}
@@ -199,12 +326,29 @@ load_channel_settings() {
     _resolve_channel_setting "${channel_id}" SRT_PBKEYLEN 16; SRT_PBKEYLEN=${REPLY}
     _resolve_channel_setting "${channel_id}" SRT_PASSPHRASE ''; SRT_PASSPHRASE=${REPLY}
 
+    # Older releases accepted an empty host for explicit local listeners.
+    if [[ ${SRT_URL} == srt://:* && ${SRT_URL} == *\?* ]]; then
+        srt_query=${SRT_URL#*\?}
+        if [[ "&${srt_query}&" == *'&mode=listener&'* ||
+                "&${srt_query}&" == *'&mode=rendezvous&'* ]]; then
+            SRT_URL="srt://0.0.0.0${SRT_URL#srt://}"
+        fi
+    fi
+
+    SRT_URL_VALID=true
+    if ! _load_settings_parse_srt_url "${SRT_URL}"; then
+        if [[ ${CHANNEL_ENABLED} != false && ${INPUT_MODE} != rtp ]]; then
+            echo "[settings] channel ${channel_id} SRT_URL has an invalid authority, port, or query" >&2
+            return 1
+        fi
+        SRT_URL_VALID=false
+        REPLY=${default_srt_port}
+    fi
+    SRT_PORT=${REPLY}
+    SRT_PUBLIC_PORT=${REPLY}
+
     CHANNEL_ID=${channel_id}
     STREAM_ID=${channel_id}
-    VIDEO_PORT=${external_base}
-    AUDIO_PORT=$((external_base + 1))
-    VIDEO_RTCP_PORT=$((external_base + 2))
-    AUDIO_RTCP_PORT=$((external_base + 3))
     SRT_RELAY_VIDEO_PORT=${relay_base}
     SRT_RELAY_AUDIO_PORT=$((relay_base + 1))
     SRT_RELAY_VIDEO_RTCP_PORT=$((relay_base + 2))
@@ -213,8 +357,6 @@ load_channel_settings() {
     JANUS_AUDIO_PORT=$((janus_base + 1))
     JANUS_VIDEO_RTCP_PORT=$((janus_base + 2))
     JANUS_AUDIO_RTCP_PORT=$((janus_base + 3))
-    SRT_PORT=${srt_port}
-    SRT_PUBLIC_PORT=${srt_port}
     HTTP_PORT=8088
     ICE_PORTS=20000-20100/udp
 
@@ -228,7 +370,7 @@ load_channel_settings() {
     fi
 
     export CHANNEL_ID CHANNEL_NAME CHANNEL_ENABLED STREAM_ID \
-        INPUT_MODE SRT_URL SRT_AUDIO AUDIO_ENABLED SRT_COLOR_MODE VIDEO_PRESET \
+        INPUT_MODE SRT_URL SRT_URL_VALID SRT_AUDIO AUDIO_ENABLED SRT_COLOR_MODE VIDEO_PRESET \
         VIDEO_BITRATE VIDEO_BUFFER_SIZE AUDIO_BITRATE MAX_WIDTH MAX_HEIGHT MAX_FPS INPUT_TIMEOUT_MS \
         SRT_PBKEYLEN SRT_PASSPHRASE VIDEO_PORT AUDIO_PORT VIDEO_RTCP_PORT \
         AUDIO_RTCP_PORT SRT_RELAY_VIDEO_PORT SRT_RELAY_AUDIO_PORT \

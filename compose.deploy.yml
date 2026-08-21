@@ -16,7 +16,6 @@ services:
       AUDIO_PORT: ${AUDIO_PORT:-5005}
       VIDEO_RTCP_PORT: ${VIDEO_RTCP_PORT:-5006}
       AUDIO_RTCP_PORT: ${AUDIO_RTCP_PORT:-5007}
-      SRT_PUBLIC_PORT: ${SRT_PORT:-9000}
       AUDIO_ENABLED: ${AUDIO_ENABLED:-true}
       PUBLIC_IP: ${PUBLIC_IP:-}
       SRT_URL: ${SRT_URL:-srt://0.0.0.0:9000?mode=listener&latency=120000}

@@ -5,6 +5,8 @@ services:
       context: .
       target: runtime
     ports:
+      # Dashboard listener-port edits are disabled in bridge mode because these
+      # host publications cannot be rewritten by the running container.
       - "8088:8088/tcp"
       - "5004-5023:5004-5023/udp"
       - "9000-9004:9000-9004/udp"
@@ -12,11 +14,6 @@ services:
     environment:
       INPUT_MODE: ${INPUT_MODE:-auto}
       STREAM_ID: ${STREAM_ID:-1}
-      VIDEO_PORT: ${VIDEO_PORT:-5004}
-      AUDIO_PORT: ${AUDIO_PORT:-5005}
-      VIDEO_RTCP_PORT: ${VIDEO_RTCP_PORT:-5006}
-      AUDIO_RTCP_PORT: ${AUDIO_RTCP_PORT:-5007}
-      SRT_PUBLIC_PORT: ${SRT_PORT:-9000}
       AUDIO_ENABLED: ${AUDIO_ENABLED:-true}
       PUBLIC_IP: ${PUBLIC_IP:-}
       SRT_URL: ${SRT_URL:-srt://0.0.0.0:9000?mode=listener&latency=120000}

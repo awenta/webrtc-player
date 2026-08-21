@@ -42,29 +42,15 @@ tenths() {
 }
 
 parse_srt_url() {
-    local url="$1" target
+    local url="$1" srt_mode
     parsed_srt_host=0.0.0.0
     parsed_srt_port=
-    parsed_srt_role=listener
-    target=${url#srt://}
-    target=${target%%\?*}
-    target=${target%%/*}
-    if [[ "${target}" == \[* ]]; then
-        parsed_srt_host=${target#\[}
-        parsed_srt_host=${parsed_srt_host%%\]*}
-        parsed_srt_port=${target##*]:}
-    elif [[ "${target}" == *:* ]]; then
-        parsed_srt_host=${target%:*}
-        parsed_srt_port=${target##*:}
-    else
-        parsed_srt_host=${target}
-    fi
-    if [[ "${url}" == *mode=caller* ]]; then
-        parsed_srt_role=caller
-    elif [[ "${url}" == *mode=rendezvous* ]]; then
-        parsed_srt_role=rendezvous
-    fi
-    return 0
+    parsed_srt_role=caller
+    _load_settings_parse_srt_url "${url}" || return 1
+    parsed_srt_port=${REPLY}
+    parsed_srt_host=${REPLY_HOST}
+    srt_mode=${REPLY_MODE}
+    parsed_srt_role=${srt_mode}
 }
 
 read_effective_network() {
@@ -192,10 +178,20 @@ EOF
 
     for channel_id in 1 2 3 4 5; do
         load_channel_settings "${channel_id}"
-        parse_srt_url "${SRT_URL}"
-        effective_srt_host=${parsed_srt_host}
-        if [[ "${parsed_srt_role}" == listener && "${parsed_srt_host}" == 0.0.0.0 ]]; then
-            effective_srt_host=${INGEST_IP}
+        srt_public_port_json=null
+        if [[ ${SRT_URL_VALID} == true ]]; then
+            parse_srt_url "${SRT_URL}" \
+                || { echo "[status] channel ${channel_id} has an invalid SRT URL" >&2; exit 1; }
+            effective_srt_host=${parsed_srt_host}
+            srt_public_port_json=$((10#${parsed_srt_port}))
+            if [[ "${parsed_srt_role}" != caller && "${parsed_srt_host}" == 0.0.0.0 ]]; then
+                effective_srt_host=${INGEST_IP}
+            fi
+        else
+            parsed_srt_host=
+            parsed_srt_port=
+            parsed_srt_role=caller
+            effective_srt_host=
         fi
         selector_status="${CHANNEL_ROOT}/${channel_id}/input-selector.status"
         selected_source=none
@@ -330,11 +326,12 @@ EOF
         "acceptsSrt": ${srt_enabled},
         "srtAddress": $(json_quote "${effective_srt_host}"),
         "srtPort": $(decimal_or_null "${parsed_srt_port}"),
-        "srtPublicPort": ${SRT_PUBLIC_PORT},
-        "videoRtpPort": ${VIDEO_PORT},
-        "audioRtpPort": ${AUDIO_PORT},
-        "videoRtcpPort": ${VIDEO_RTCP_PORT},
-        "audioRtcpPort": ${AUDIO_RTCP_PORT},
+        "srtPublicPort": ${srt_public_port_json},
+        "videoRtpPort": $((10#${VIDEO_PORT})),
+        "audioRtpPort": $((10#${AUDIO_PORT})),
+        "videoRtcpPort": $((10#${VIDEO_RTCP_PORT})),
+        "audioRtcpPort": $((10#${AUDIO_RTCP_PORT})),
+        "directAudioEnabled": ${AUDIO_ENABLED},
         "audioEnabled": ${input_audio_enabled},
         "packets": { "direct": ${direct_packets}, "srt": ${srt_packets} },
         "sourceSwitches": ${switches},

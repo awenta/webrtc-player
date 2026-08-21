@@ -6,8 +6,8 @@ This temporary checklist tracks implementation of five concurrent named channels
 
 - Five fixed channel slots can run concurrently.
 - Stream IDs are fixed to 1-5.
-- SRT listener ports are fixed to 9000-9004.
-- Direct RTP/RTCP ports are fixed to 5004-5023 in four-port channel blocks.
+- SRT listener ports default to 9000-9004 and are configured through each channel's canonical `SRT_URL`.
+- Direct RTP/RTCP ports default to 5004-5023 and are independently configurable per channel in host-network deployments.
 - One Janus, Nginx, WebSocket endpoint, ICE range, config API, and status API are shared.
 - The UI displays one selected channel at a time; the browser player is preview only.
 - All five channels start enabled unless explicitly disabled in persisted configuration.
@@ -29,9 +29,10 @@ This temporary checklist tracks implementation of five concurrent named channels
 - [x] Add selected-channel UI navigation, preview switching, URLs, and contextual editors.
 - [x] Verify five-channel isolation, configuration impact, telemetry, and resource behavior.
 - [x] Add automatic default-route discovery and independent management, ingest, and WebRTC interface roles.
+- [x] Add guarded per-channel ingest port configuration, collision validation, readiness checks, and rollback.
 - [x] Update documentation and changelog.
 
-## Port Map
+## Default Port Map
 
 | Channel | Stream ID | SRT | Direct RTP/RTCP | Relay RTP/RTCP | Janus RTP/RTCP |
 |---|---:|---:|---:|---:|---:|
@@ -51,3 +52,4 @@ This temporary checklist tracks implementation of five concurrent named channels
 - Existing persisted settings migrate to Channel 1; all channels without an explicit setting start enabled.
 - The container remains non-root/read-only and the Janus Admin endpoint is loopback-only.
 - Production host networking binds each externally reachable service only to its selected IPv4 role address.
+- Invalid, duplicate, ICE-overlapping, or unavailable ingest ports are rejected without replacing the last working channel configuration.

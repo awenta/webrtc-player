@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+image=${1:-webrtc-player:port-config-test}
+host_container=webrtc-player-port-test
+bridge_container=webrtc-player-port-bridge-test
+
+cleanup() {
+    docker rm -f "${host_container}" "${bridge_container}" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+cleanup
+
+docker run -d --name "${host_container}" -e NETWORK_MODE=host \
+    -p 18088:8088/tcp "${image}" >/dev/null
+WEBRTC_PLAYER_TEST_URL=http://127.0.0.1:18088 \
+    WEBRTC_PLAYER_TEST_MODE=host \
+    node tests/container-port-config.test.mjs
+
+ingest_ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "${host_container}")
+[[ -n ${ingest_ip} ]]
+docker exec "${host_container}" sh -c "env \
+    INPUT_MODE=rtp AUDIO_ENABLED=true RTP_BIND_IP=${ingest_ip} \
+    VIDEO_PORT=6200 AUDIO_PORT=6201 VIDEO_RTCP_PORT=6202 AUDIO_RTCP_PORT=6203 \
+    SRT_RELAY_VIDEO_PORT=16000 SRT_RELAY_AUDIO_PORT=16001 \
+    SRT_RELAY_VIDEO_RTCP_PORT=16002 SRT_RELAY_AUDIO_RTCP_PORT=16003 \
+    JANUS_VIDEO_PORT=26000 JANUS_AUDIO_PORT=26001 \
+    JANUS_VIDEO_RTCP_PORT=26002 JANUS_AUDIO_RTCP_PORT=26003 \
+    INPUT_TIMEOUT_MS=5000 RTP_PACING_US=100 \
+    SELECTOR_STATUS_PATH=/tmp/occupied-selector.status \
+    /usr/local/bin/input-selector >/tmp/occupied-selector.log 2>&1 &"
+sleep 1
+docker exec "${host_container}" sh -c \
+    "grep -qi ':1838 ' /proc/net/udp || { cat /tmp/occupied-selector.log >&2; exit 1; }"
+WEBRTC_PLAYER_TEST_URL=http://127.0.0.1:18088 \
+    WEBRTC_PLAYER_TEST_MODE=host \
+    WEBRTC_PLAYER_TEST_OCCUPIED_PORT=true \
+    node tests/container-port-config.test.mjs
+
+docker run -d --name "${bridge_container}" -p 18089:8088/tcp "${image}" >/dev/null
+WEBRTC_PLAYER_TEST_URL=http://127.0.0.1:18089 \
+    WEBRTC_PLAYER_TEST_MODE=bridge \
+    node tests/container-port-config.test.mjs

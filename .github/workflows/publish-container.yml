@@ -17,7 +17,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Run tests
+        run: bash tests/run.sh
+
   publish:
+    needs: test
     if: >-
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/tags/v') ||
@@ -29,6 +44,20 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Build integration-test image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          platforms: linux/amd64
+          load: true
+          tags: webrtc-player:integration-test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run container integration tests
+        run: bash tests/container-port-config.test.sh webrtc-player:integration-test
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3

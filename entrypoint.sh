@@ -10,6 +10,7 @@ readonly CHANNEL_RUNTIME_ROOT=/run/webrtc-player/channels
 readonly NETWORK_JSON=/run/webrtc-player/network.json
 readonly NETWORK_ENV=/run/webrtc-player/network.env
 readonly NGINX_CONFIG=/run/webrtc-player/nginx.conf
+declare -A STARTUP_UDP_PORT_OWNERS=()
 
 fail() {
     echo "[configure] error: $*" >&2
@@ -18,8 +19,9 @@ fail() {
 
 require_uint() {
     local name="$1" value="$2" min="$3" max="$4"
-    [[ "${value}" =~ ^[0-9]+$ ]] || fail "${name} must be an integer"
-    (( value >= min && value <= max )) || fail "${name} must be between ${min} and ${max}"
+    [[ "${value}" =~ ^[0-9]{1,5}$ && ( ${value} == 0 || ${value} != 0* ) ]] \
+        || fail "${name} must be a canonical integer"
+    (( 10#${value} >= min && 10#${value} <= max )) || fail "${name} must be between ${min} and ${max}"
 }
 
 require_bool() {
@@ -35,6 +37,9 @@ config_escape() {
 }
 
 validate_channel() {
+    local port_name port srt_url_port srt_mode
+    local -A external_ports=()
+
     [[ "${CHANNEL_NAME}" != *$'\n'* && "${CHANNEL_NAME}" != *$'\r'* && -n "${CHANNEL_NAME}" ]] \
         || fail "Channel ${CHANNEL_ID} has an invalid name"
     require_bool CHANNEL_ENABLED "${CHANNEL_ENABLED}"
@@ -44,13 +49,73 @@ validate_channel() {
     require_bool SRT_AUDIO "${SRT_AUDIO}"
     [[ "${SRT_COLOR_MODE}" == "auto" || "${SRT_COLOR_MODE}" == "fast" || "${SRT_COLOR_MODE}" == "hdr-to-sdr" ]] \
         || fail "Channel ${CHANNEL_ID} SRT_COLOR_MODE is invalid"
-    if [[ "${INPUT_MODE}" != "rtp" ]]; then
-        [[ "${SRT_URL}" == srt://* ]] || fail "Channel ${CHANNEL_ID} SRT_URL must start with srt://"
+    if [[ ${SRT_URL_VALID} == true ]]; then
+        _load_settings_parse_srt_url "${SRT_URL}" \
+            || fail "Channel ${CHANNEL_ID} SRT_URL has an invalid authority, port, or query"
+        srt_url_port=${REPLY}
+        srt_mode=${REPLY_MODE}
+        [[ ${SRT_PORT} == "${srt_url_port}" && ${SRT_PUBLIC_PORT} == "${srt_url_port}" ]] \
+            || fail "Channel ${CHANNEL_ID} SRT port resolution is inconsistent"
+        [[ ${srt_mode} == listener || ${srt_mode} == caller || ${srt_mode} == rendezvous ]] \
+            || fail "Channel ${CHANNEL_ID} SRT_URL mode is invalid"
+    elif [[ ${CHANNEL_ENABLED} != false && ${INPUT_MODE} != rtp ]]; then
+        fail "Channel ${CHANNEL_ID} requires a valid SRT_URL"
     fi
     for port_name in VIDEO_PORT AUDIO_PORT VIDEO_RTCP_PORT AUDIO_RTCP_PORT \
             SRT_RELAY_VIDEO_PORT SRT_RELAY_AUDIO_PORT SRT_RELAY_VIDEO_RTCP_PORT SRT_RELAY_AUDIO_RTCP_PORT \
             JANUS_VIDEO_PORT JANUS_AUDIO_PORT JANUS_VIDEO_RTCP_PORT JANUS_AUDIO_RTCP_PORT; do
         require_uint "Channel ${CHANNEL_ID} ${port_name}" "${!port_name}" 1024 65535
+    done
+    for port_name in VIDEO_PORT AUDIO_PORT VIDEO_RTCP_PORT AUDIO_RTCP_PORT; do
+        port=$((10#${!port_name}))
+        [[ ! -v external_ports["${port}"] ]] \
+            || fail "Channel ${CHANNEL_ID} direct RTP and RTCP ports must all be different"
+        external_ports["${port}"]=1
+    done
+}
+
+reserve_startup_udp_port() {
+    local channel_id="$1" field="$2" value="$3" port
+    port=$((10#${value}))
+    if (( port >= 20000 && port <= 20100 )); then
+        fail "Channel ${channel_id} ${field} port ${port} conflicts with fixed ICE range 20000-20100"
+    fi
+    if [[ -v STARTUP_UDP_PORT_OWNERS["${port}"] ]]; then
+        fail "UDP port ${port} conflicts between ${STARTUP_UDP_PORT_OWNERS[${port}]} and Channel ${channel_id} ${field}"
+    fi
+    STARTUP_UDP_PORT_OWNERS["${port}"]="Channel ${channel_id} ${field}"
+}
+
+validate_all_channel_ports() {
+    local channel_id port_name srt_port srt_mode bridge_base bridge_srt_port
+    STARTUP_UDP_PORT_OWNERS=()
+    for channel_id in 1 2 3 4 5; do
+        load_channel_settings "${channel_id}" || fail "Channel ${channel_id} settings could not be loaded"
+        validate_channel
+        if [[ ${NETWORK_MODE} == bridge ]]; then
+            bridge_base=$((5004 + 4 * (channel_id - 1)))
+            [[ ${VIDEO_PORT} == "${bridge_base}" && ${AUDIO_PORT} == "$((bridge_base + 1))" &&
+                    ${VIDEO_RTCP_PORT} == "$((bridge_base + 2))" &&
+                    ${AUDIO_RTCP_PORT} == "$((bridge_base + 3))" ]] \
+                || fail "Channel ${channel_id} direct ports must use the published default allocation in bridge mode"
+        fi
+        for port_name in VIDEO_PORT AUDIO_PORT VIDEO_RTCP_PORT AUDIO_RTCP_PORT; do
+            reserve_startup_udp_port "${channel_id}" "${port_name}" "${!port_name}"
+        done
+        if [[ ${SRT_URL_VALID} == true ]]; then
+            _load_settings_parse_srt_url "${SRT_URL}" \
+                || fail "Channel ${channel_id} SRT_URL could not be parsed for port reservation"
+            srt_port=${REPLY}
+            srt_mode=${REPLY_MODE}
+            if [[ ${srt_mode} != caller ]]; then
+                if [[ ${NETWORK_MODE} == bridge ]]; then
+                    bridge_srt_port=$((9000 + channel_id - 1))
+                    [[ ${srt_port} == "${bridge_srt_port}" ]] \
+                        || fail "Channel ${channel_id} local SRT port must be ${bridge_srt_port} in bridge mode"
+                fi
+                reserve_startup_udp_port "${channel_id}" "SRT_URL local" "${srt_port}"
+            fi
+        fi
     done
 }
 
@@ -74,6 +139,7 @@ install -d -o player -g player -m 0750 \
     "${CONFIG_DIR}" "${CHANNEL_RUNTIME_ROOT}" /config /config/settings /config/channels
 chown -R player:player /config
 chmod 0750 /config /config/settings /config/channels
+validate_all_channel_ports
 
 management_resolution=$(/usr/local/bin/network-info resolve "${MANAGEMENT_INTERFACE}") \
     || fail "MANAGEMENT_INTERFACE does not select an UP IPv4 interface"
@@ -205,7 +271,7 @@ stream-${STREAM_ID}: {
     )
 }
 EOF
-    echo "[configure] channel=${CHANNEL_ID} enabled=${CHANNEL_ENABLED} stream=${STREAM_ID} srt-port=${SRT_PORT} rtp=${VIDEO_PORT}-${AUDIO_RTCP_PORT}"
+    echo "[configure] channel=${CHANNEL_ID} enabled=${CHANNEL_ENABLED} stream=${STREAM_ID} srt-port=${SRT_PORT} video-rtp=${VIDEO_PORT} audio-rtp=${AUDIO_PORT} video-rtcp=${VIDEO_RTCP_PORT} audio-rtcp=${AUDIO_RTCP_PORT}"
 done
 
 chown -R player:player "${CONFIG_DIR}" "${CHANNEL_RUNTIME_ROOT}"

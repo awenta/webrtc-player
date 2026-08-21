@@ -321,8 +321,15 @@
   .form-field label, .check-field > span:first-child { display: block; margin-bottom: 7px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
   .form-field input, .form-field select { width: 100%; min-height: 40px; padding: 0 11px; border: 1px solid var(--line); border-radius: 9px; outline: none; color: var(--text); background: #0d1416; font-size: 12px; }
   .form-field input:focus, .form-field select:focus { border-color: var(--cyan); box-shadow: 0 0 0 3px rgba(131, 217, 223, 0.09); }
-  .form-field input:disabled { color: var(--quiet); }
+  .form-field input:disabled { color: var(--quiet); background: #11191b; cursor: not-allowed; }
   .field-help { margin: 6px 0 0; color: var(--quiet); font-size: 10px; line-height: 1.4; }
+  .direct-port-block { grid-column: 1 / -1; padding: 13px; border: 1px solid var(--line-soft); border-radius: 11px; background: rgba(255, 255, 255, 0.015); }
+  .direct-port-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .direct-port-head h4 { margin: 0; font-size: 12px; }
+  .direct-port-head span { color: var(--quiet); font-size: 10px; }
+  .port-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .direct-port-block[data-disabled="true"] .port-grid, .port-grid .form-field[data-disabled="true"] { opacity: 0.55; }
+  .bridge-note { margin: 12px 0 0; padding-top: 11px; border-top: 1px solid var(--line-soft); color: var(--amber); font-size: 10px; line-height: 1.5; }
   .network-intro { margin: 0 0 16px; padding: 13px 14px; border: 1px solid var(--line-soft); border-radius: 11px; color: var(--muted); background: rgba(255, 255, 255, 0.015); font-size: 11px; line-height: 1.55; }
   .network-intro strong { color: var(--text); font-weight: 650; }
   .network-mode { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 10px; color: var(--quiet); font-size: 10px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
@@ -342,10 +349,10 @@
   .check-field { display: flex; align-items: center; justify-content: space-between; min-height: 46px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 10px; background: rgba(255, 255, 255, 0.015); }
   .check-field > span:first-child { margin: 0; letter-spacing: 0; text-transform: none; }
   .check-field input { width: 17px; height: 17px; accent-color: var(--cyan); }
-  .fixed-grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-column: 1 / -1; gap: 8px; margin: 2px 0 0; }
-  .fixed-value { min-width: 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: 9px; background: rgba(255, 255, 255, 0.015); }
-  .fixed-value dt { margin-bottom: 5px; color: var(--quiet); font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
-  .fixed-value dd { overflow: hidden; margin: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .allocation-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-column: 1 / -1; gap: 8px; margin: 2px 0 0; }
+  .allocation-value { min-width: 0; padding: 10px; border: 1px solid var(--line-soft); border-radius: 9px; background: rgba(255, 255, 255, 0.015); }
+  .allocation-value dt { margin-bottom: 5px; color: var(--quiet); font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .allocation-value dd { overflow: hidden; margin: 0; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .dialog-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px 22px; border-top: 1px solid var(--line-soft); background: #101719; }
   .save-status { min-height: 16px; overflow-wrap: anywhere; color: var(--muted); font-size: 11px; line-height: 1.45; }
   .save-status.error { color: var(--red); }
@@ -370,7 +377,7 @@
     .channel-slot { min-width: 150px; scroll-snap-align: start; }
     .channel-tab { min-width: 0; }
     .details { grid-template-columns: 1fr; gap: 12px; }
-    .fixed-grid { grid-template-columns: 1fr 1fr; }
+    .allocation-grid { grid-template-columns: 1fr; }
     .role-grid { grid-template-columns: 1fr; }
     .role-card > p { min-height: 0; }
   }
@@ -394,6 +401,9 @@
     .endpoint { grid-template-columns: 74px minmax(0, 1fr) auto; gap: 8px; }
     .settings-context, .form-grid, .check-row { grid-template-columns: 1fr; }
     .form-field.full, .check-row { grid-column: auto; }
+    .port-grid { grid-template-columns: 1fr; }
+    .direct-port-head { display: block; }
+    .direct-port-head span { display: block; margin-top: 4px; }
     .form-section-head { display: block; }
     .form-section-head p { margin-top: 5px; text-align: left; }
     .dialog-foot { align-items: stretch; flex-direction: column; }
@@ -612,10 +622,32 @@
             <input id="configInputTimeout" name="INPUT_TIMEOUT_MS" type="number" min="1000" max="60000" step="500" required>
             <p class="field-help">Milliseconds without video before another source can be selected.</p>
           </div>
+          <div class="direct-port-block" id="directPortBlock" role="group" aria-labelledby="directPortTitle" aria-describedby="directPortState bridgePortNote" data-disabled="false">
+            <div class="direct-port-head"><h4 id="directPortTitle">Direct RTP/RTCP input ports</h4><span id="directPortState">Editable in host mode</span></div>
+            <div class="port-grid">
+              <div class="form-field" id="configVideoPortField">
+                <label for="configVideoPort">Video RTP port</label>
+                <input id="configVideoPort" name="VIDEO_PORT" type="number" min="1024" max="65535" required>
+              </div>
+              <div class="form-field" id="configVideoRtcpPortField">
+                <label for="configVideoRtcpPort">Video RTCP port</label>
+                <input id="configVideoRtcpPort" name="VIDEO_RTCP_PORT" type="number" min="1024" max="65535" required>
+              </div>
+              <div class="form-field" id="configAudioPortField">
+                <label for="configAudioPort">Audio RTP port</label>
+                <input id="configAudioPort" name="AUDIO_PORT" type="number" min="1024" max="65535" required>
+              </div>
+              <div class="form-field" id="configAudioRtcpPortField">
+                <label for="configAudioRtcpPort">Audio RTCP port</label>
+                <input id="configAudioRtcpPort" name="AUDIO_RTCP_PORT" type="number" min="1024" max="65535" required>
+              </div>
+            </div>
+            <p class="bridge-note" id="bridgePortNote" hidden>Bridge mode: Docker RTP/RTCP mappings cannot be changed from the dashboard, so these ports are read-only. SRT_URL remains editable for caller destinations; a changed local listener port will be rejected until deployment mappings are changed.</p>
+          </div>
           <div class="form-field full">
-            <label for="configSrtUrl">SRT listener or caller URL</label>
-            <input id="configSrtUrl" name="SRT_URL" type="text" spellcheck="false" required>
-            <p class="field-help">Use mode=listener to receive a caller, or mode=caller with the remote source address.</p>
+            <label for="configSrtUrl">SRT listener, caller, or rendezvous URL</label>
+            <input id="configSrtUrl" name="SRT_URL" type="text" spellcheck="false" aria-describedby="srtUrlHelp" required>
+            <p class="field-help" id="srtUrlHelp" aria-live="polite">Enter a complete srt://host:port URL.</p>
           </div>
           <div class="check-row">
             <label class="check-field"><span>Expect audio in SRT</span><input id="configSrtAudio" name="SRT_AUDIO" type="checkbox"></label>
@@ -658,13 +690,12 @@
       </section>
 
       <section class="form-section">
-        <div class="form-section-head"><h3>Output</h3><p>Fixed allocation for this channel.</p></div>
+        <div class="form-section-head"><h3>Output / shared allocation</h3><p>Read-only channel output and shared service ports.</p></div>
         <div class="form-grid">
-          <dl class="fixed-grid" aria-label="Fixed channel allocation">
-            <div class="fixed-value"><dt>Stream ID</dt><dd id="fixedStreamId">—</dd></div>
-            <div class="fixed-value"><dt>Video / audio RTP</dt><dd id="fixedRtpPorts">—</dd></div>
-            <div class="fixed-value"><dt>SRT / HTTP</dt><dd id="fixedServicePorts">—</dd></div>
-            <div class="fixed-value"><dt>ICE ports</dt><dd id="fixedIcePorts">—</dd></div>
+          <dl class="allocation-grid" aria-label="Output and shared allocation">
+            <div class="allocation-value"><dt>Stream ID</dt><dd id="allocationStreamId">—</dd></div>
+            <div class="allocation-value"><dt>HTTP port</dt><dd id="allocationHttpPort">—</dd></div>
+            <div class="allocation-value"><dt>ICE ports</dt><dd id="allocationIcePorts">—</dd></div>
           </dl>
         </div>
       </section>
@@ -686,7 +717,7 @@
       <section class="form-section" style="border-top:0">
         <div class="form-section-head"><h3>Network roles</h3><p>Changes briefly restart affected shared services.</p></div>
         <div class="network-mode">Current network mode <span id="networkMode">Unavailable</span></div>
-        <p class="network-intro"><strong>Automatic</strong> uses the primary interface from the default route. All roles may use the same interface. Management serves TCP 8088; media input uses UDP 5004-5023 and 9000-9004; WebRTC output uses UDP 20000-20100.</p>
+        <p class="network-intro"><strong>Automatic</strong> uses the primary interface from the default route. All roles may use the same interface. Management serves TCP 8088; media input uses each channel's configured RTP/RTCP ports and canonical SRT URL; WebRTC output uses UDP 20000-20100.</p>
         <div class="role-grid">
           <section class="role-card" aria-labelledby="managementRoleTitle">
             <h4 id="managementRoleTitle">Web UI / management</h4>
@@ -767,6 +798,7 @@
   var statusFetchFailed = false;
   var previewEnabled = true;
   var managementRedirectPending = false;
+  var editingOriginalSrtUrl = "";
 
   try {
     previewEnabled = window.localStorage.getItem(PREVIEW_STORAGE_KEY) !== "false";
@@ -973,6 +1005,156 @@
     return host.indexOf(":") >= 0 ? "[" + host + "]" : host;
   }
 
+  function parseSrtUrl(value) {
+    var result = { valid: false, host: "", port: null, role: "", explicitMode: false, error: "Enter a complete srt://host:port URL." };
+    if (!isPresent(value)) return result;
+    var raw = String(value).trim();
+    if (raw.length > 2048 || /[\r\n]/.test(raw)) {
+      result.error = "SRT_URL must be a single line no longer than 2048 characters.";
+      return result;
+    }
+    if (raw.indexOf("srt://") !== 0) {
+      result.error = "SRT_URL must start with srt://.";
+      return result;
+    }
+    if (raw.indexOf("#") >= 0) {
+      result.error = "SRT_URL must not include a fragment.";
+      return result;
+    }
+    var queryIndex = raw.indexOf("?");
+    if (queryIndex >= 0 && raw.indexOf("?", queryIndex + 1) >= 0) {
+      result.error = "SRT_URL must not include more than one query separator.";
+      return result;
+    }
+    var authority = raw.slice(6, queryIndex >= 0 ? queryIndex : raw.length);
+    if (!authority) {
+      result.error = "SRT_URL must include a host and port.";
+      return result;
+    }
+    if (authority.indexOf("@") >= 0) {
+      result.error = "SRT_URL must not include a username or password.";
+      return result;
+    }
+    if (authority.indexOf("/") >= 0) {
+      result.error = "SRT_URL must not include a path.";
+      return result;
+    }
+
+    var rawHost;
+    var portText;
+    if (authority.charAt(0) === "[") {
+      var closingBracket = authority.indexOf("]");
+      if (closingBracket <= 1 || authority.charAt(closingBracket + 1) !== ":" || authority.indexOf("]", closingBracket + 1) >= 0) {
+        result.error = "Use srt://[IPv6]:port for an IPv6 SRT host.";
+        return result;
+      }
+      rawHost = authority.slice(1, closingBracket);
+      portText = authority.slice(closingBracket + 2);
+    } else {
+      var portSeparator = authority.indexOf(":");
+      if (portSeparator <= 0 || portSeparator !== authority.lastIndexOf(":")) {
+        result.error = "SRT_URL must include one host and port; bracket IPv6 addresses.";
+        return result;
+      }
+      rawHost = authority.slice(0, portSeparator);
+      portText = authority.slice(portSeparator + 1);
+      var alphanumeric = /^[A-Za-z0-9]$/;
+      var validHost = rawHost.length <= 253 && alphanumeric.test(rawHost.charAt(0)) && alphanumeric.test(rawHost.charAt(rawHost.length - 1));
+      var labelLength = 0;
+      var numericHost = validHost;
+      for (var hostIndex = 0; validHost && hostIndex < rawHost.length; hostIndex++) {
+        var character = rawHost.charAt(hostIndex);
+        if (character === ".") {
+          validHost = labelLength > 0 && labelLength <= 63 && rawHost.charAt(hostIndex - 1) !== "-";
+          labelLength = 0;
+          continue;
+        }
+        if (!/\d/.test(character)) numericHost = false;
+        if (!/[A-Za-z0-9_-]/.test(character) || (labelLength === 0 && character === "-")) validHost = false;
+        labelLength++;
+      }
+      validHost = validHost && labelLength > 0 && labelLength <= 63 && rawHost.charAt(rawHost.length - 1) !== "-";
+      if (validHost && numericHost) {
+        var octets = rawHost.split(".");
+        validHost = octets.length === 4 && octets.every(function(octet) {
+          return /^\d{1,3}$/.test(octet) && (octet === "0" || octet.charAt(0) !== "0") && Number(octet) <= 255;
+        });
+      }
+      if (!validHost) {
+        result.error = "SRT_URL contains an invalid host.";
+        return result;
+      }
+    }
+
+    if (!/^[1-9]\d*$/.test(portText)) {
+      result.error = "SRT_URL must include a numeric port from 1024 to 65535.";
+      return result;
+    }
+    var port = Number(portText);
+    if (!Number.isSafeInteger(port) || port < 1024 || port > 65535) {
+      result.error = "SRT_URL port must be from 1024 to 65535.";
+      return result;
+    }
+
+    var mode = "";
+    if (queryIndex >= 0) {
+      var query = raw.slice(queryIndex + 1);
+      var components = query.split("&");
+      if (!query || components.some(function(component) { return component === ""; })) {
+        result.error = "SRT_URL query parameters must not contain empty components.";
+        return result;
+      }
+      var modeSeen = false;
+      for (var componentIndex = 0; componentIndex < components.length; componentIndex++) {
+        var component = components[componentIndex];
+        var equalsIndex = component.indexOf("=");
+        var key = equalsIndex >= 0 ? component.slice(0, equalsIndex) : component;
+        if (key !== "mode") continue;
+        if (modeSeen) {
+          result.error = "SRT_URL must not include mode more than once.";
+          return result;
+        }
+        modeSeen = true;
+        mode = equalsIndex >= 0 ? component.slice(equalsIndex + 1) : "";
+        if (mode !== "listener" && mode !== "caller" && mode !== "rendezvous") {
+          result.error = "SRT_URL mode must be listener, caller, or rendezvous.";
+          return result;
+        }
+      }
+    }
+
+    try {
+      var parsed = new URL(raw);
+      if (parsed.protocol !== "srt:" || !parsed.hostname || parsed.username || parsed.password || parsed.pathname || parsed.hash) {
+        result.error = "SRT_URL must contain only an SRT host, port, and query parameters.";
+        return result;
+      }
+      result.valid = true;
+      result.host = parsed.hostname;
+      result.port = port;
+      result.explicitMode = Boolean(mode);
+      result.role = mode || "caller";
+      result.error = "";
+      return result;
+    } catch (error) {
+      result.error = rawHost.indexOf(":") >= 0 ? "SRT_URL contains an invalid bracketed IPv6 address." : "SRT_URL contains an invalid host.";
+      return result;
+    }
+  }
+
+  function describeSrtHost(host) {
+    var normalized = String(host || "").replace(/^\[|\]$/g, "").toLowerCase();
+    return normalized === "0.0.0.0" || normalized === "::" ? "all ingest interfaces" : formatUrlHost(host);
+  }
+
+  function srtEndpoint(host, port) {
+    return isPresent(host) && isPresent(port) ? formatUrlHost(host) + ":" + port : null;
+  }
+
+  function bridgeNetworkMode(config) {
+    return String(networkConfig(config || latestConfig).mode || "").toLowerCase().indexOf("bridge") >= 0;
+  }
+
   function managementRedirectUrl(address) {
     var target = new URL(location.href);
     target.hostname = formatUrlHost(address);
@@ -1064,10 +1246,19 @@
 
   function renderInput(channel) {
     var input = channel.input || {};
+    var configured = selectedConfigChannel();
+    var values = configured && configured.values ? configured.values : {};
+    var mode = isPresent(input.mode) ? input.mode : values.INPUT_MODE;
+    var acceptsRtp = typeof input.acceptsRtp === "boolean" ? input.acceptsRtp : mode !== "srt";
+    var audioEnabled = typeof input.audioEnabled === "boolean" ? input.audioEnabled : values.AUDIO_ENABLED === true || values.AUDIO_ENABLED === "true";
+    var videoRtpPort = isPresent(input.videoRtpPort) ? input.videoRtpPort : values.VIDEO_PORT;
+    var videoRtcpPort = isPresent(input.videoRtcpPort) ? input.videoRtcpPort : values.VIDEO_RTCP_PORT;
+    var audioRtpPort = isPresent(input.audioRtpPort) ? input.audioRtpPort : values.AUDIO_PORT;
+    var audioRtcpPort = isPresent(input.audioRtcpPort) ? input.audioRtcpPort : values.AUDIO_RTCP_PORT;
     var presentation = inputPresentation(channel);
     var selectedSource = isPresent(input.selectedSource) ? String(input.selectedSource).toLowerCase() : null;
     var sourceLabel = selectedSource === "rtp" ? "Direct RTP" : selectedSource === "srt" ? "SRT contribution" : selectedSource === "none" ? "No source" : titleCase(selectedSource);
-    var summary = selectedSource === "rtp" ? "Direct RTP" : selectedSource === "srt" ? "SRT contribution" : input.mode === "auto" ? "Automatic input" : isPresent(input.transport) ? input.transport : "Input";
+    var summary = selectedSource === "rtp" ? "Direct RTP" : selectedSource === "srt" ? "SRT contribution" : mode === "auto" ? "Automatic input" : isPresent(input.transport) ? input.transport : "Input";
     var detail;
     if (channel.enabled === false) detail = "Channel is disabled";
     else if (selectedSource === "none") detail = "Listening for an accepted source";
@@ -1077,15 +1268,15 @@
     setText("inputSummaryDetail", detail);
     setTone("inputState", presentation.tone, presentation.label);
 
-    setText("inputMode", input.mode === "auto" ? "Automatic" : titleCase(input.mode));
+    setText("inputMode", mode === "auto" ? "Automatic" : titleCase(mode));
     setText("selectedSource", sourceLabel);
     var address = null;
     if (selectedSource === "rtp" && isPresent(input.remoteAddress)) address = input.remoteAddress + (isPresent(input.remotePort) ? ":" + input.remotePort : "");
     else if (selectedSource === "srt" && isPresent(input.address)) address = (input.address === "0.0.0.0" ? "All interfaces" : input.address) + (isPresent(input.port) ? ":" + input.port : "");
     else if (selectedSource === "none") address = "Waiting for source";
     setText("inputAddress", address);
-    setText("videoInputPorts", input.acceptsRtp === false ? "Not enabled" : formatPair(input.videoRtpPort, input.videoRtcpPort));
-    setText("audioInputPorts", input.acceptsRtp === false ? "Not enabled" : input.audioEnabled === false ? "Disabled" : formatPair(input.audioRtpPort, input.audioRtcpPort));
+    setText("videoInputPorts", acceptsRtp === false ? "Not enabled" : formatPair(videoRtpPort, videoRtcpPort));
+    setText("audioInputPorts", acceptsRtp === false ? "Not enabled" : audioEnabled === false ? "Disabled" : formatPair(audioRtpPort, audioRtcpPort));
     var packets = input.packets;
     setText("inputPackets", packets ? formatPair(formatInteger(packets.direct), formatInteger(packets.srt)) : null);
     setText("sourceSwitches", formatInteger(input.sourceSwitches));
@@ -1184,8 +1375,14 @@
   }
 
   function renderEmptySelectedStatus() {
+    var configured = selectedConfigChannel();
+    var values = configured && configured.values ? configured.values : {};
+    var mode = values.INPUT_MODE;
+    var acceptsRtp = isPresent(mode) && mode !== "srt";
+    var audioEnabled = values.AUDIO_ENABLED === true || values.AUDIO_ENABLED === "true";
+    var parsedSrt = parseSrtUrl(values.SRT_URL);
     setText("inputSummary", "Input");
-    setText("inputSummaryDetail", "Status is not available");
+    setText("inputSummaryDetail", configured ? "Runtime status is unavailable; showing configured endpoints" : "Status is not available");
     setTone("inputState", "warn", "Unavailable");
     setText("processSummary", "Processing");
     setText("processSummaryDetail", "Status is not available");
@@ -1193,7 +1390,12 @@
     setText("outputSummary", "WebRTC output");
     setText("outputSummaryDetail", "Server status is not available");
     setTone("outputState", "warn", "Unavailable");
-    ["inputMode", "selectedSource", "inputAddress", "videoInputPorts", "audioInputPorts", "inputPackets", "sourceSwitches", "forwardDrops", "inputDetailState", "pipelineMode", "processingActive", "processingFrame", "encodeFps", "encodedBitrate", "mediaSpeed", "processingElapsed", "processingFrames", "appResources", "outputTransport", "outputActive", "outputTelemetry", "viewerCount", "aggregateBitrate", "outputTraffic", "outputLoss", "outputTiming", "outputQuality"].forEach(function(id) { setText(id, null); });
+    setText("inputMode", mode === "auto" ? "Automatic" : titleCase(mode));
+    setText("selectedSource", configured ? "Runtime status unavailable" : null);
+    setText("inputAddress", parsedSrt.valid ? (parsedSrt.role === "caller" ? "Caller destination " : parsedSrt.role === "rendezvous" ? "Local rendezvous " : "Local listener ") + srtEndpoint(parsedSrt.host, parsedSrt.port) : null);
+    setText("videoInputPorts", acceptsRtp ? formatPair(values.VIDEO_PORT, values.VIDEO_RTCP_PORT) : isPresent(mode) ? "Not enabled" : null);
+    setText("audioInputPorts", acceptsRtp ? audioEnabled ? formatPair(values.AUDIO_PORT, values.AUDIO_RTCP_PORT) : "Disabled" : isPresent(mode) ? "Not enabled" : null);
+    ["inputPackets", "sourceSwitches", "forwardDrops", "inputDetailState", "pipelineMode", "processingActive", "processingFrame", "encodeFps", "encodedBitrate", "mediaSpeed", "processingElapsed", "processingFrames", "appResources", "outputTransport", "outputActive", "outputTelemetry", "viewerCount", "aggregateBitrate", "outputTraffic", "outputLoss", "outputTiming", "outputQuality"].forEach(function(id) { setText(id, null); });
     ["selectorService", "ffmpegService", "janusService", "nginxService"].forEach(function(id) { setTone(id, "warn", byId(id).textContent.split(" · ")[0] + " · Unknown"); });
   }
 
@@ -1234,22 +1436,35 @@
     var statusChannel = selectedStatusChannel();
     var input = statusChannel && statusChannel.input ? statusChannel.input : {};
     var configured = selectedConfigChannel();
-    var fixed = configured && configured.fixed ? configured.fixed : {};
-    var videoRtp = isPresent(input.videoRtpPort) ? input.videoRtpPort : fixed.VIDEO_PORT;
-    var audioRtp = isPresent(input.audioRtpPort) ? input.audioRtpPort : fixed.AUDIO_PORT;
-    var videoRtcp = isPresent(input.videoRtcpPort) ? input.videoRtcpPort : fixed.VIDEO_RTCP_PORT;
-    var audioRtcp = isPresent(input.audioRtcpPort) ? input.audioRtcpPort : fixed.AUDIO_RTCP_PORT;
-    var srtPort = input.srtPublicPort || input.srtPort || fixed.SRT_PORT;
+    var values = configured && configured.values ? configured.values : {};
+    var enabled = statusChannel ? statusChannel.enabled !== false : configured ? configured.enabled !== false : false;
+    var acceptsRtp = typeof input.acceptsRtp === "boolean" ? input.acceptsRtp : enabled && values.INPUT_MODE !== "srt";
+    var acceptsSrt = typeof input.acceptsSrt === "boolean" ? input.acceptsSrt : enabled && values.INPUT_MODE !== "rtp";
+    var directAudio = typeof input.directAudioEnabled === "boolean" ? input.directAudioEnabled : values.AUDIO_ENABLED === true || values.AUDIO_ENABLED === "true";
+    var videoRtp = acceptsRtp ? (isPresent(input.videoRtpPort) ? input.videoRtpPort : values.VIDEO_PORT) : null;
+    var audioRtp = acceptsRtp && directAudio ? (isPresent(input.audioRtpPort) ? input.audioRtpPort : values.AUDIO_PORT) : null;
+    var videoRtcp = acceptsRtp ? (isPresent(input.videoRtcpPort) ? input.videoRtcpPort : values.VIDEO_RTCP_PORT) : null;
+    var audioRtcp = acceptsRtp && directAudio ? (isPresent(input.audioRtcpPort) ? input.audioRtcpPort : values.AUDIO_RTCP_PORT) : null;
+    var parsedSrt = parseSrtUrl(values.SRT_URL);
+    var runtimeRole = String(input.role || "").toLowerCase();
+    var srtRole = runtimeRole === "caller" || runtimeRole === "listener" || runtimeRole === "rendezvous" ? runtimeRole : parsedSrt.role;
     var srtUrl = null;
-    if (input.role === "caller" && isPresent(input.address) && isPresent(input.port)) {
-      var callerHost = String(input.address);
-      if (callerHost.indexOf(":") >= 0 && callerHost.charAt(0) !== "[") callerHost = "[" + callerHost + "]";
-      srtUrl = "srt://" + callerHost + ":" + input.port + "?mode=listener";
+    if (!acceptsSrt) {
+      setText("srtConnectHint", enabled ? "Not accepted in the current input mode" : "Channel is disabled");
+    } else if (srtRole === "caller") {
+      var callerHost = input.srtAddress || (input.selectedSource === "srt" ? input.address : null) || parsedSrt.host;
+      var callerPort = input.srtPort || (input.selectedSource === "srt" ? input.port : null) || parsedSrt.port;
+      if (isPresent(callerHost) && isPresent(callerPort)) srtUrl = "srt://" + formatUrlHost(callerHost) + ":" + callerPort + "?mode=listener";
       setText("srtConnectHint", "Run a listener at the configured remote source");
-    } else if (isPresent(srtPort)) {
-      srtUrl = "srt://" + host + ":" + srtPort + "?mode=caller&latency=120000";
-      setText("srtConnectHint", input.acceptsSrt === false ? "Not accepted in the current input mode" : "MPEG-TS caller for this channel");
+    } else {
+      var srtPort = input.srtPublicPort || input.srtPort || parsedSrt.port;
+      var listenerHost = input.srtAddress || parsedSrt.host;
+      if (!isPresent(listenerHost) || listenerHost === "0.0.0.0" || listenerHost === "::") listenerHost = host;
+      else listenerHost = formatUrlHost(listenerHost);
+      if (isPresent(srtPort)) srtUrl = "srt://" + listenerHost + ":" + srtPort + (srtRole === "rendezvous" ? "?mode=rendezvous" : "?mode=caller&latency=120000");
+      setText("srtConnectHint", srtRole === "rendezvous" ? "SRT rendezvous endpoint for this channel" : "MPEG-TS caller for this channel");
     }
+    if (acceptsSrt && !srtUrl && isPresent(values.SRT_URL)) setText("srtConnectHint", "Configured SRT URL could not be parsed");
     setText("srtConnectValue", srtUrl);
     setText("videoRtpConnectValue", isPresent(videoRtp) ? "rtp://" + host + ":" + videoRtp : null);
     setText("videoRtcpConnectValue", isPresent(videoRtcp) ? "rtcp://" + host + ":" + videoRtcp : null);
@@ -1292,22 +1507,66 @@
     passphrase.required = action === "set";
     if (action !== "set") passphrase.value = "";
   }
+  function updateSrtUrlHelp() {
+    var input = byId("configSrtUrl");
+    var parsed = parseSrtUrl(input.value);
+    input.setCustomValidity("");
+    input.setAttribute("aria-invalid", parsed.valid ? "false" : "true");
+    var help = parsed.error + " SRT_URL is the canonical port setting.";
+    if (parsed.valid) {
+      if (parsed.role === "caller") help = "Port " + parsed.port + " is the caller destination on " + describeSrtHost(parsed.host) + ".";
+      else if (parsed.role === "rendezvous") help = "Port " + parsed.port + " is the local rendezvous endpoint on " + describeSrtHost(parsed.host) + ".";
+      else if (parsed.role === "listener") help = "Port " + parsed.port + " is the local listener on " + describeSrtHost(parsed.host) + ".";
+      if (bridgeNetworkMode() && parsed.role !== "caller") {
+        var original = parseSrtUrl(editingOriginalSrtUrl);
+        var rejectedTransition = original.valid && (original.port !== parsed.port || original.role === "caller");
+        help += rejectedTransition ? " Bridge mode: this change to a local SRT endpoint will be rejected until Docker deployment mappings are changed." : " Bridge mode: changing this local port will be rejected until Docker deployment mappings are changed.";
+      }
+    }
+    setText("srtUrlHelp", help);
+  }
+  function updateDirectPortControls() {
+    var bridge = bridgeNetworkMode();
+    var srtOnly = byId("configInputMode").value === "srt";
+    var srtRequired = byId("configChannelEnabled").checked && byId("configInputMode").value !== "rtp";
+    var audioEnabled = byId("configAudioEnabled").checked;
+    var videoDisabled = bridge || srtOnly;
+    var audioDisabled = videoDisabled || !audioEnabled;
+    ["configVideoPort", "configVideoRtcpPort"].forEach(function(id) { byId(id).disabled = videoDisabled; });
+    ["configAudioPort", "configAudioRtcpPort"].forEach(function(id) { byId(id).disabled = audioDisabled; });
+    byId("directPortBlock").dataset.disabled = videoDisabled ? "true" : "false";
+    byId("directPortBlock").setAttribute("aria-disabled", videoDisabled ? "true" : "false");
+    ["configVideoPortField", "configVideoRtcpPortField"].forEach(function(id) { byId(id).dataset.disabled = videoDisabled ? "true" : "false"; });
+    ["configAudioPortField", "configAudioRtcpPortField"].forEach(function(id) { byId(id).dataset.disabled = audioDisabled ? "true" : "false"; });
+    setText("directPortState", bridge ? "Read-only in bridge mode" : srtOnly ? "Inactive for SRT-only input" : audioEnabled ? "Editable in host mode" : "Audio ports inactive");
+    byId("bridgePortNote").hidden = !bridge;
+    byId("configSrtUrl").required = srtRequired;
+    updateSrtUrlHelp();
+  }
+  function directPortValuesValid() {
+    return ["VIDEO_PORT", "VIDEO_RTCP_PORT", "AUDIO_PORT", "AUDIO_RTCP_PORT"].every(function(name) {
+      var value = configControl(name).value.trim();
+      var port = Number(value);
+      return /^[1-9]\d*$/.test(value) && Number.isSafeInteger(port) && port >= 1024 && port <= 65535;
+    });
+  }
   function populateChannelConfig(config, channelId) {
     var channel = config.channels.find(function(item) { return Number(item.id) === channelId; });
     if (!channel) throw new Error("The selected channel configuration is unavailable");
     setConfigControl("CHANNEL_NAME", channel.name);
     setConfigControl("CHANNEL_ENABLED", channel.enabled);
     Object.keys(channel.values || {}).forEach(function(name) { setConfigControl(name, channel.values[name]); });
+    editingOriginalSrtUrl = channel.values && isPresent(channel.values.SRT_URL) ? String(channel.values.SRT_URL) : "";
     byId("passphraseAction").value = "keep";
     byId("configPassphrase").value = "";
     updatePassphraseControl();
     setText("passphraseHelp", channel.passphraseConfigured ? "A passphrase is saved. Keep it, replace it, or explicitly clear it." : "No passphrase is saved. Choose Set to enable SRT encryption.");
     var fixed = channel.fixed || {};
-    setText("fixedStreamId", fixed.STREAM_ID);
-    setText("fixedRtpPorts", formatPair(fixed.VIDEO_PORT, fixed.AUDIO_PORT));
-    setText("fixedServicePorts", formatPair(fixed.SRT_PORT, fixed.HTTP_PORT));
-    setText("fixedIcePorts", fixed.ICE_PORTS);
+    setText("allocationStreamId", fixed.STREAM_ID);
+    setText("allocationHttpPort", fixed.HTTP_PORT);
+    setText("allocationIcePorts", fixed.ICE_PORTS);
     setText("channelSettingsTitle", channel.name + " settings");
+    updateDirectPortControls();
   }
 
   async function fetchConfig() {
@@ -1316,7 +1575,7 @@
     try { result = await response.json(); }
     catch (error) { throw new Error("Configuration returned an invalid response"); }
     if (!response.ok) throw new Error(result.error || "Configuration is unavailable");
-    if (result.version !== 2 || !Array.isArray(result.channels)) throw new Error("Configuration schema is not supported");
+    if (result.version !== 3 || !Array.isArray(result.channels)) throw new Error("Configuration schema is not supported");
     latestConfig = result;
     renderSelectedChannel();
     return result;
@@ -1356,16 +1615,34 @@
     byId("configPassphrase").value = "";
     byId("channelDialog").close();
     editingChannelId = null;
+    editingOriginalSrtUrl = "";
   }
 
   async function saveChannelSetup(event) {
     event.preventDefault();
     var form = byId("channelForm");
+    var srtInput = byId("configSrtUrl");
+    srtInput.setCustomValidity("");
+    var parsedSrt = parseSrtUrl(srtInput.value);
+    var srtRequired = byId("configChannelEnabled").checked && byId("configInputMode").value !== "rtp";
+    if (!parsedSrt.valid && srtRequired) {
+      srtInput.setCustomValidity(parsedSrt.error);
+      srtInput.setAttribute("aria-invalid", "true");
+      byId("channelSaveStatus").className = "save-status error";
+      setText("channelSaveStatus", parsedSrt.error);
+      form.reportValidity();
+      return;
+    }
     if (!form.reportValidity() || !editingChannelId) return;
+    if (!directPortValuesValid()) {
+      byId("channelSaveStatus").className = "save-status error";
+      setText("channelSaveStatus", "All direct RTP/RTCP ports must be integers from 1024 to 65535.");
+      return;
+    }
     var saveButton = byId("saveChannelButton");
     var channelId = editingChannelId;
     var body = new URLSearchParams();
-    var valueNames = ["INPUT_MODE", "SRT_URL", "SRT_COLOR_MODE", "VIDEO_PRESET", "VIDEO_BITRATE", "VIDEO_BUFFER_SIZE", "AUDIO_BITRATE", "MAX_WIDTH", "MAX_HEIGHT", "MAX_FPS", "INPUT_TIMEOUT_MS", "SRT_PBKEYLEN"];
+    var valueNames = ["INPUT_MODE", "VIDEO_PORT", "VIDEO_RTCP_PORT", "AUDIO_PORT", "AUDIO_RTCP_PORT", "SRT_URL", "SRT_COLOR_MODE", "VIDEO_PRESET", "VIDEO_BITRATE", "VIDEO_BUFFER_SIZE", "AUDIO_BITRATE", "MAX_WIDTH", "MAX_HEIGHT", "MAX_FPS", "INPUT_TIMEOUT_MS", "SRT_PBKEYLEN"];
     body.set("scope", "channel");
     body.set("CHANNEL_ID", String(channelId));
     body.set("CHANNEL_NAME", configControl("CHANNEL_NAME").value.trim());
@@ -1793,6 +2070,10 @@
   byId("cancelGlobalButton").addEventListener("click", closeGlobalSetup);
   byId("globalForm").addEventListener("submit", saveGlobalSetup);
   byId("passphraseAction").addEventListener("change", updatePassphraseControl);
+  byId("configSrtUrl").addEventListener("input", updateSrtUrlHelp);
+  byId("configChannelEnabled").addEventListener("change", updateDirectPortControls);
+  byId("configInputMode").addEventListener("change", updateDirectPortControls);
+  byId("configAudioEnabled").addEventListener("change", updateDirectPortControls);
   document.querySelectorAll("[data-copy]").forEach(function(button) { button.addEventListener("click", function() { copyEndpoint(button); }); });
   document.querySelectorAll("[data-channel-config]").forEach(function(button) {
     button.addEventListener("click", function() { openChannelSetup(parseInt(button.dataset.channelConfig, 10)); });

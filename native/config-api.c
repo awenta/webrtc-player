@@ -54,6 +54,10 @@ struct channel_config {
     char srt_url[2049];
     char srt_audio[16];
     char audio_enabled[16];
+    char video_port[16];
+    char audio_port[16];
+    char video_rtcp_port[16];
+    char audio_rtcp_port[16];
     char srt_color_mode[32];
     char video_preset[32];
     char video_bitrate[REQUEST_CAPACITY];
@@ -83,6 +87,17 @@ struct file_snapshot {
     bool exists;
     char *data;
     size_t length;
+};
+
+struct srt_endpoint {
+    unsigned int port;
+    bool local_port;
+};
+
+struct udp_reservation {
+    unsigned int port;
+    unsigned int channel_id;
+    const char *field;
 };
 
 static volatile sig_atomic_t running = 1;
@@ -156,6 +171,10 @@ static void assign_channel_value(struct channel_config *config, const char *key,
     ASSIGN_CHANNEL_VALUE("SRT_URL", srt_url);
     ASSIGN_CHANNEL_VALUE("SRT_AUDIO", srt_audio);
     ASSIGN_CHANNEL_VALUE("AUDIO_ENABLED", audio_enabled);
+    ASSIGN_CHANNEL_VALUE("VIDEO_PORT", video_port);
+    ASSIGN_CHANNEL_VALUE("AUDIO_PORT", audio_port);
+    ASSIGN_CHANNEL_VALUE("VIDEO_RTCP_PORT", video_rtcp_port);
+    ASSIGN_CHANNEL_VALUE("AUDIO_RTCP_PORT", audio_rtcp_port);
     ASSIGN_CHANNEL_VALUE("SRT_COLOR_MODE", srt_color_mode);
     ASSIGN_CHANNEL_VALUE("VIDEO_PRESET", video_preset);
     ASSIGN_CHANNEL_VALUE("VIDEO_BITRATE", video_bitrate);
@@ -195,16 +214,53 @@ static void load_channel_file(const char *path, struct channel_config *config) {
     fclose(file);
 }
 
+static void normalize_legacy_srt_listener(char *value, size_t capacity) {
+    const char *query;
+    const char *cursor;
+    char normalized[2049];
+    bool local_mode = false;
+    int written;
+
+    if (strncmp(value, "srt://:", 7) != 0 || (query = strchr(value, '?')) == NULL) return;
+    cursor = query + 1;
+    while (*cursor != '\0') {
+        const char *end = strchr(cursor, '&');
+        size_t length;
+        if (end == NULL) end = value + strlen(value);
+        length = (size_t)(end - cursor);
+        if ((length == 13 && memcmp(cursor, "mode=listener", 13) == 0) ||
+                (length == 15 && memcmp(cursor, "mode=rendezvous", 15) == 0)) {
+            local_mode = true;
+            break;
+        }
+        if (*end == '\0') break;
+        cursor = end + 1;
+    }
+    if (!local_mode) return;
+    written = snprintf(normalized, sizeof(normalized), "srt://0.0.0.0%s", value + 6);
+    if (written < 0 || (size_t)written >= sizeof(normalized)) return;
+    (void)copy_value(value, capacity, normalized);
+}
+
 static void load_channel_config(unsigned int channel_id, struct channel_config *config) {
     char channel_name[32];
     char srt_url[128];
+    char video_port[16];
+    char audio_port[16];
+    char video_rtcp_port[16];
+    char audio_rtcp_port[16];
     char path[512];
+    unsigned int base = 5004 + 4 * (channel_id - 1);
     unsigned int srt_port = 9000 + channel_id - 1;
 
     memset(config, 0, sizeof(*config));
     snprintf(channel_name, sizeof(channel_name), "Channel %u", channel_id);
     snprintf(srt_url, sizeof(srt_url),
             "srt://0.0.0.0:%u?mode=listener&latency=120000", srt_port);
+    snprintf(video_port, sizeof(video_port), "%u", base);
+    snprintf(audio_port, sizeof(audio_port), "%u", base + 1);
+    snprintf(video_rtcp_port, sizeof(video_rtcp_port), "%u", base + 2);
+    snprintf(audio_rtcp_port, sizeof(audio_rtcp_port), "%u", base + 3);
 
 #define LOAD_DEFAULT(key, fallback, member) \
     fallback_value(channel_id, key, fallback, config->member, sizeof(config->member))
@@ -214,6 +270,10 @@ static void load_channel_config(unsigned int channel_id, struct channel_config *
     LOAD_DEFAULT("SRT_URL", srt_url, srt_url);
     LOAD_DEFAULT("SRT_AUDIO", "true", srt_audio);
     LOAD_DEFAULT("AUDIO_ENABLED", "true", audio_enabled);
+    LOAD_DEFAULT("VIDEO_PORT", video_port, video_port);
+    LOAD_DEFAULT("AUDIO_PORT", audio_port, audio_port);
+    LOAD_DEFAULT("VIDEO_RTCP_PORT", video_rtcp_port, video_rtcp_port);
+    LOAD_DEFAULT("AUDIO_RTCP_PORT", audio_rtcp_port, audio_rtcp_port);
     LOAD_DEFAULT("SRT_COLOR_MODE", "auto", srt_color_mode);
     LOAD_DEFAULT("VIDEO_PRESET", "veryfast", video_preset);
     LOAD_DEFAULT("VIDEO_BITRATE", "6M", video_bitrate);
@@ -229,6 +289,7 @@ static void load_channel_config(unsigned int channel_id, struct channel_config *
 
     snprintf(path, sizeof(path), "%s/channel-%u.conf", CHANNELS_DIR, channel_id);
     load_channel_file(path, config);
+    normalize_legacy_srt_listener(config->srt_url, sizeof(config->srt_url));
 }
 
 static void assign_global_value(struct global_config *config, const char *key, const char *value) {
@@ -692,9 +753,201 @@ static bool load_network_json(char *json, size_t capacity) {
     return true;
 }
 
-static bool valid_srt_url(const char *value) {
-    return value != NULL && strncmp(value, "srt://", 6) == 0 && strlen(value) <= 2048 &&
-            !contains_line_break(value);
+static bool parse_port_span(const char *value, size_t length, unsigned int *port) {
+    unsigned int number = 0;
+    if (length == 0 || length > 5 || (length > 1 && value[0] == '0')) return false;
+    for (size_t index = 0; index < length; index++) {
+        if (!isdigit((unsigned char)value[index])) return false;
+        number = number * 10 + (unsigned int)(value[index] - '0');
+    }
+    if (number < 1024 || number > 65535) return false;
+    *port = number;
+    return true;
+}
+
+static bool parse_port_value(const char *value, unsigned int *port) {
+    return value != NULL && parse_port_span(value, strlen(value), port);
+}
+
+static bool valid_srt_hostname(const char *host, size_t length) {
+    bool numeric = true;
+    size_t label_length = 0;
+    if (length == 0 || length > 253 || !isalnum((unsigned char)host[0]) ||
+            !isalnum((unsigned char)host[length - 1])) return false;
+    for (size_t index = 0; index < length; index++) {
+        unsigned char character = (unsigned char)host[index];
+        if (character == '.') {
+            if (label_length == 0 || label_length > 63 || host[index - 1] == '-') return false;
+            label_length = 0;
+            continue;
+        }
+        if (!isdigit(character)) numeric = false;
+        if (!isalnum(character) && character != '-' && character != '_') return false;
+        if (label_length == 0 && character == '-') return false;
+        label_length++;
+    }
+    if (label_length == 0 || label_length > 63 || host[length - 1] == '-') return false;
+    if (numeric) {
+        struct in_addr address;
+        char ipv4[INET_ADDRSTRLEN];
+        if (length >= sizeof(ipv4)) return false;
+        memcpy(ipv4, host, length);
+        ipv4[length] = '\0';
+        return inet_pton(AF_INET, ipv4, &address) == 1;
+    }
+    return true;
+}
+
+static bool parse_srt_url(const char *value, struct srt_endpoint *endpoint) {
+    const char *authority;
+    const char *authority_end;
+    const char *port_start;
+    const char *query;
+    bool mode_seen = false;
+    bool local_port = false;
+    size_t length;
+
+    if (value == NULL || strncmp(value, "srt://", 6) != 0 || contains_line_break(value)) return false;
+    length = strlen(value);
+    if (length > 2048 || strchr(value + 6, '#') != NULL) return false;
+    authority = value + 6;
+    query = strchr(authority, '?');
+    if (query != NULL && strchr(query + 1, '?') != NULL) return false;
+    authority_end = query == NULL ? value + length : query;
+    if (authority == authority_end) return false;
+
+    if (*authority == '[') {
+        struct in6_addr address;
+        char host[INET6_ADDRSTRLEN];
+        const char *closing = memchr(authority, ']', (size_t)(authority_end - authority));
+        size_t host_length;
+        if (closing == NULL || closing == authority + 1 || closing + 1 >= authority_end ||
+                closing[1] != ':') return false;
+        host_length = (size_t)(closing - authority - 1);
+        if (host_length >= sizeof(host)) return false;
+        memcpy(host, authority + 1, host_length);
+        host[host_length] = '\0';
+        if (inet_pton(AF_INET6, host, &address) != 1) return false;
+        port_start = closing + 2;
+    } else {
+        const char *separator = memchr(authority, ':', (size_t)(authority_end - authority));
+        if (separator == NULL || memchr(separator + 1, ':', (size_t)(authority_end - separator - 1)) != NULL ||
+                !valid_srt_hostname(authority, (size_t)(separator - authority))) return false;
+        port_start = separator + 1;
+    }
+    if (!parse_port_span(port_start, (size_t)(authority_end - port_start), &endpoint->port)) return false;
+
+    if (query != NULL) {
+        const char *cursor = query + 1;
+        while (true) {
+            const char *end = strchr(cursor, '&');
+            const char *separator;
+            size_t key_length;
+            if (end == NULL) end = value + length;
+            if (end == cursor) return false;
+            separator = memchr(cursor, '=', (size_t)(end - cursor));
+            key_length = separator == NULL ? (size_t)(end - cursor) : (size_t)(separator - cursor);
+            if (key_length == 4 && memcmp(cursor, "mode", 4) == 0) {
+                size_t mode_length;
+                const char *mode;
+                if (mode_seen || separator == NULL) return false;
+                mode_seen = true;
+                mode = separator + 1;
+                mode_length = (size_t)(end - mode);
+                if (mode_length == 6 && memcmp(mode, "caller", 6) == 0) {
+                    local_port = false;
+                } else if ((mode_length == 8 && memcmp(mode, "listener", 8) == 0) ||
+                        (mode_length == 10 && memcmp(mode, "rendezvous", 10) == 0)) {
+                    local_port = true;
+                } else {
+                    return false;
+                }
+            }
+            if (*end == '\0') break;
+            cursor = end + 1;
+        }
+    }
+    endpoint->local_port = local_port;
+    return true;
+}
+
+static bool reserve_udp_port(struct udp_reservation *reservations, size_t *count,
+        unsigned int port, unsigned int channel_id, const char *field,
+        char *error, size_t error_capacity) {
+    if (port >= 20000 && port <= 20100) {
+        (void)snprintf(error, error_capacity,
+                "{\"error\":\"UDP port %u for Channel %u %s conflicts with fixed ICE range 20000-20100\"}",
+                port, channel_id, field);
+        return false;
+    }
+    for (size_t index = 0; index < *count; index++) {
+        if (reservations[index].port == port) {
+            (void)snprintf(error, error_capacity,
+                    "{\"error\":\"UDP port %u conflicts between Channel %u %s and Channel %u %s\"}",
+                    port, reservations[index].channel_id, reservations[index].field, channel_id, field);
+            return false;
+        }
+    }
+    reservations[*count] = (struct udp_reservation){port, channel_id, field};
+    (*count)++;
+    return true;
+}
+
+static bool validate_udp_reservations(unsigned int candidate_channel,
+        const char *const candidate_ports[4], const char *candidate_srt_url, bool candidate_uses_srt,
+        char *error, size_t error_capacity) {
+    static const char *const port_fields[4] = {
+        "VIDEO_PORT", "AUDIO_PORT", "VIDEO_RTCP_PORT", "AUDIO_RTCP_PORT"
+    };
+    struct udp_reservation reservations[CHANNEL_COUNT * 5];
+    size_t reservation_count = 0;
+
+    for (unsigned int channel_id = 1; channel_id <= CHANNEL_COUNT; channel_id++) {
+        struct channel_config config;
+        struct srt_endpoint srt_endpoint;
+        const char *ports[4];
+        const char *srt_url;
+
+        load_channel_config(channel_id, &config);
+        if (channel_id == candidate_channel) {
+            for (size_t index = 0; index < 4; index++) ports[index] = candidate_ports[index];
+            srt_url = candidate_srt_url;
+        } else {
+            ports[0] = config.video_port;
+            ports[1] = config.audio_port;
+            ports[2] = config.video_rtcp_port;
+            ports[3] = config.audio_rtcp_port;
+            srt_url = config.srt_url;
+        }
+        for (size_t index = 0; index < 4; index++) {
+            unsigned int port;
+            if (!parse_port_value(ports[index], &port)) {
+                (void)snprintf(error, error_capacity,
+                        "{\"error\":\"Channel %u %s must be an integer between 1024 and 65535\"}",
+                        channel_id, port_fields[index]);
+                return false;
+            }
+            if (!reserve_udp_port(reservations, &reservation_count, port, channel_id,
+                    port_fields[index], error, error_capacity)) return false;
+        }
+        if (!parse_srt_url(srt_url, &srt_endpoint)) {
+            if (channel_id == candidate_channel && !candidate_uses_srt) continue;
+            if (channel_id != candidate_channel && strcmp(config.channel_enabled, "false") == 0) continue;
+            if (channel_id != candidate_channel && strcmp(config.input_mode, "rtp") == 0) continue;
+            (void)snprintf(error, error_capacity,
+                    "{\"error\":\"Channel %u SRT_URL is invalid\"}", channel_id);
+            return false;
+        }
+        if (srt_endpoint.local_port && !reserve_udp_port(reservations, &reservation_count,
+                srt_endpoint.port, channel_id, "SRT_URL local port", error, error_capacity)) return false;
+    }
+    return true;
+}
+
+static bool bridge_network_mode(void) {
+    const char *mode = getenv("NETWORK_MODE");
+    if (mode == NULL || *mode == '\0') mode = "bridge";
+    return strcmp(mode, "bridge") == 0;
 }
 
 static bool valid_channel_name(const char *value) {
@@ -772,8 +1025,6 @@ static bool request_apply(unsigned int channel_id, bool global_changed) {
 static bool append_channel_json(char *response, size_t capacity, size_t *length,
         unsigned int channel_id, const struct channel_config *config) {
     char fixed[512];
-    unsigned int base = 5004 + 4 * (channel_id - 1);
-    unsigned int srt_port = 9000 + channel_id - 1;
     int fixed_length;
 
     if (!append_literal(response, capacity, length, "{\"id\":")) return false;
@@ -794,6 +1045,10 @@ static bool append_channel_json(char *response, size_t capacity, size_t *length,
             !append_json_member(response, capacity, length, "SRT_URL", config->srt_url, true) ||
             !append_json_member(response, capacity, length, "SRT_AUDIO", config->srt_audio, true) ||
             !append_json_member(response, capacity, length, "AUDIO_ENABLED", config->audio_enabled, true) ||
+            !append_json_member(response, capacity, length, "VIDEO_PORT", config->video_port, true) ||
+            !append_json_member(response, capacity, length, "AUDIO_PORT", config->audio_port, true) ||
+            !append_json_member(response, capacity, length, "VIDEO_RTCP_PORT", config->video_rtcp_port, true) ||
+            !append_json_member(response, capacity, length, "AUDIO_RTCP_PORT", config->audio_rtcp_port, true) ||
             !append_json_member(response, capacity, length, "SRT_COLOR_MODE", config->srt_color_mode, true) ||
             !append_json_member(response, capacity, length, "VIDEO_PRESET", config->video_preset, true) ||
             !append_json_member(response, capacity, length, "VIDEO_BITRATE", config->video_bitrate, true) ||
@@ -806,10 +1061,8 @@ static bool append_channel_json(char *response, size_t capacity, size_t *length,
             !append_json_member(response, capacity, length, "SRT_PBKEYLEN", config->srt_pbkeylen, false)) return false;
 
     fixed_length = snprintf(fixed, sizeof(fixed),
-            "},\"fixed\":{\"STREAM_ID\":%u,\"VIDEO_PORT\":%u,\"AUDIO_PORT\":%u,"
-            "\"VIDEO_RTCP_PORT\":%u,\"AUDIO_RTCP_PORT\":%u,\"SRT_PORT\":%u,"
-            "\"HTTP_PORT\":8088,\"ICE_PORTS\":\"20000-20100/udp\"}}",
-            channel_id, base, base + 1, base + 2, base + 3, srt_port);
+            "},\"fixed\":{\"STREAM_ID\":%u,\"HTTP_PORT\":8088,"
+            "\"ICE_PORTS\":\"20000-20100/udp\"}}", channel_id);
     return fixed_length >= 0 && (size_t)fixed_length < sizeof(fixed) &&
             append_literal(response, capacity, length, fixed);
 }
@@ -829,7 +1082,7 @@ static void handle_get(int client) {
         return;
     }
     ok = append_literal(response, sizeof(response), &length,
-            "{\"version\":2,\"global\":{\"PUBLIC_IP\":") &&
+            "{\"version\":3,\"global\":{\"PUBLIC_IP\":") &&
             append_json_string(response, sizeof(response), &length, global.public_ip) &&
             append_literal(response, sizeof(response), &length, ",\"MANAGEMENT_INTERFACE\":") &&
             append_json_string(response, sizeof(response), &length, global.management_interface) &&
@@ -924,6 +1177,10 @@ static void handle_post(int client, struct field *fields, size_t count) {
     const char *srt_url = field_value(fields, count, "SRT_URL");
     const char *srt_audio = field_value(fields, count, "SRT_AUDIO");
     const char *audio_enabled = field_value(fields, count, "AUDIO_ENABLED");
+    const char *video_port = field_value(fields, count, "VIDEO_PORT");
+    const char *audio_port = field_value(fields, count, "AUDIO_PORT");
+    const char *video_rtcp_port = field_value(fields, count, "VIDEO_RTCP_PORT");
+    const char *audio_rtcp_port = field_value(fields, count, "AUDIO_RTCP_PORT");
     const char *color_mode = field_value(fields, count, "SRT_COLOR_MODE");
     const char *video_preset = field_value(fields, count, "VIDEO_PRESET");
     const char *video_bitrate = field_value(fields, count, "VIDEO_BITRATE");
@@ -936,13 +1193,21 @@ static void handle_post(int client, struct field *fields, size_t count) {
     const char *pbkeylen = field_value(fields, count, "SRT_PBKEYLEN");
     const char *passphrase_action = field_value(fields, count, "passphraseAction");
     const char *passphrase = field_value(fields, count, "SRT_PASSPHRASE");
+    const char *candidate_ports[4] = {video_port, audio_port, video_rtcp_port, audio_rtcp_port};
     unsigned int channel_id;
+    unsigned int candidate_port_numbers[4];
+    unsigned int old_port_numbers[4];
+    struct srt_endpoint proposed_srt;
+    struct srt_endpoint old_srt;
     struct channel_config old_config;
-    struct config_pair channel_pairs[17];
+    struct config_pair channel_pairs[21];
     struct file_snapshot channel_snapshot;
     const char *selected_passphrase;
     char channel_path[512];
+    char validation_error[256];
     char success_response[128];
+    bool channel_uses_srt;
+    bool proposed_srt_valid;
 
     for (size_t index = 0; index < count; index++) {
         if (contains_line_break(fields[index].value)) {
@@ -958,9 +1223,17 @@ static void handle_post(int client, struct field *fields, size_t count) {
         send_response(client, 400, "{\"error\":\"Configuration scope is invalid\"}");
         return;
     }
+    channel_uses_srt = channel_enabled != NULL && mode != NULL &&
+            strcmp(channel_enabled, "false") != 0 && strcmp(mode, "rtp") != 0;
+    proposed_srt_valid = parse_srt_url(srt_url, &proposed_srt);
     if (!integer_in_range(channel_id_value, 1, CHANNEL_COUNT) || !valid_channel_name(channel_name) ||
-            !one_of(channel_enabled, booleans) || !one_of(mode, modes) || !valid_srt_url(srt_url) ||
+            !one_of(channel_enabled, booleans) || !one_of(mode, modes) ||
+            (!proposed_srt_valid && channel_uses_srt) ||
             !one_of(srt_audio, booleans) || !one_of(audio_enabled, booleans) ||
+            !parse_port_value(video_port, &candidate_port_numbers[0]) ||
+            !parse_port_value(audio_port, &candidate_port_numbers[1]) ||
+            !parse_port_value(video_rtcp_port, &candidate_port_numbers[2]) ||
+            !parse_port_value(audio_rtcp_port, &candidate_port_numbers[3]) ||
             !one_of(color_mode, colors) || !one_of(video_preset, presets) ||
             !valid_bitrate(video_bitrate) || !valid_bitrate(video_buffer_size) ||
             !valid_bitrate(audio_bitrate) ||
@@ -977,6 +1250,31 @@ static void handle_post(int client, struct field *fields, size_t count) {
 
     channel_id = (unsigned int)strtoul(channel_id_value, NULL, 10);
     load_channel_config(channel_id, &old_config);
+    if (bridge_network_mode() &&
+            (!parse_port_value(old_config.video_port, &old_port_numbers[0]) ||
+             !parse_port_value(old_config.audio_port, &old_port_numbers[1]) ||
+             !parse_port_value(old_config.video_rtcp_port, &old_port_numbers[2]) ||
+             !parse_port_value(old_config.audio_rtcp_port, &old_port_numbers[3]) ||
+             candidate_port_numbers[0] != old_port_numbers[0] ||
+             candidate_port_numbers[1] != old_port_numbers[1] ||
+             candidate_port_numbers[2] != old_port_numbers[2] ||
+             candidate_port_numbers[3] != old_port_numbers[3])) {
+        send_response(client, 400,
+                "{\"error\":\"Direct RTP/RTCP ports cannot be changed while NETWORK_MODE=bridge\"}");
+        return;
+    }
+    if (bridge_network_mode() && proposed_srt_valid && proposed_srt.local_port &&
+            (!parse_srt_url(old_config.srt_url, &old_srt) || !old_srt.local_port ||
+             proposed_srt.port != old_srt.port)) {
+        send_response(client, 400,
+                "{\"error\":\"A local SRT listener or rendezvous port cannot be added or changed while NETWORK_MODE=bridge\"}");
+        return;
+    }
+    if (!validate_udp_reservations(channel_id, candidate_ports, srt_url, channel_uses_srt,
+            validation_error, sizeof(validation_error))) {
+        send_response(client, 400, validation_error);
+        return;
+    }
     selected_passphrase = strcmp(passphrase_action, "set") == 0 ? passphrase :
             strcmp(passphrase_action, "clear") == 0 ? "" : old_config.srt_passphrase;
 
@@ -986,17 +1284,21 @@ static void handle_post(int client, struct field *fields, size_t count) {
     channel_pairs[3] = (struct config_pair){"SRT_URL", srt_url};
     channel_pairs[4] = (struct config_pair){"SRT_AUDIO", srt_audio};
     channel_pairs[5] = (struct config_pair){"AUDIO_ENABLED", audio_enabled};
-    channel_pairs[6] = (struct config_pair){"SRT_COLOR_MODE", color_mode};
-    channel_pairs[7] = (struct config_pair){"VIDEO_PRESET", video_preset};
-    channel_pairs[8] = (struct config_pair){"VIDEO_BITRATE", video_bitrate};
-    channel_pairs[9] = (struct config_pair){"VIDEO_BUFFER_SIZE", video_buffer_size};
-    channel_pairs[10] = (struct config_pair){"AUDIO_BITRATE", audio_bitrate};
-    channel_pairs[11] = (struct config_pair){"MAX_WIDTH", max_width};
-    channel_pairs[12] = (struct config_pair){"MAX_HEIGHT", max_height};
-    channel_pairs[13] = (struct config_pair){"MAX_FPS", max_fps};
-    channel_pairs[14] = (struct config_pair){"INPUT_TIMEOUT_MS", timeout};
-    channel_pairs[15] = (struct config_pair){"SRT_PBKEYLEN", pbkeylen};
-    channel_pairs[16] = (struct config_pair){"SRT_PASSPHRASE", selected_passphrase};
+    channel_pairs[6] = (struct config_pair){"VIDEO_PORT", video_port};
+    channel_pairs[7] = (struct config_pair){"AUDIO_PORT", audio_port};
+    channel_pairs[8] = (struct config_pair){"VIDEO_RTCP_PORT", video_rtcp_port};
+    channel_pairs[9] = (struct config_pair){"AUDIO_RTCP_PORT", audio_rtcp_port};
+    channel_pairs[10] = (struct config_pair){"SRT_COLOR_MODE", color_mode};
+    channel_pairs[11] = (struct config_pair){"VIDEO_PRESET", video_preset};
+    channel_pairs[12] = (struct config_pair){"VIDEO_BITRATE", video_bitrate};
+    channel_pairs[13] = (struct config_pair){"VIDEO_BUFFER_SIZE", video_buffer_size};
+    channel_pairs[14] = (struct config_pair){"AUDIO_BITRATE", audio_bitrate};
+    channel_pairs[15] = (struct config_pair){"MAX_WIDTH", max_width};
+    channel_pairs[16] = (struct config_pair){"MAX_HEIGHT", max_height};
+    channel_pairs[17] = (struct config_pair){"MAX_FPS", max_fps};
+    channel_pairs[18] = (struct config_pair){"INPUT_TIMEOUT_MS", timeout};
+    channel_pairs[19] = (struct config_pair){"SRT_PBKEYLEN", pbkeylen};
+    channel_pairs[20] = (struct config_pair){"SRT_PASSPHRASE", selected_passphrase};
 
     if (!ensure_config_directories()) {
         send_response(client, 500, "{\"error\":\"Could not prepare configuration storage\"}");
@@ -1007,7 +1309,8 @@ static void handle_post(int client, struct field *fields, size_t count) {
         send_response(client, 500, "{\"error\":\"Could not read existing channel settings\"}");
         return;
     }
-    if (!atomic_write_pairs(channel_path, channel_pairs, 17)) {
+    if (!atomic_write_pairs(channel_path, channel_pairs,
+            sizeof(channel_pairs) / sizeof(channel_pairs[0]))) {
         bool restored = restore_snapshot(channel_path, &channel_snapshot);
         free_snapshot(&channel_snapshot);
         send_response(client, 500, restored ?
@@ -1018,10 +1321,11 @@ static void handle_post(int client, struct field *fields, size_t count) {
 
     if (!request_apply(channel_id, false)) {
         bool channel_restored = restore_snapshot(channel_path, &channel_snapshot);
+        bool runtime_restored = channel_restored && request_apply(channel_id, false);
         free_snapshot(&channel_snapshot);
-        send_response(client, 500, channel_restored ?
-                "{\"error\":\"Services could not apply settings; previous settings were restored\"}" :
-                "{\"error\":\"Services could not apply settings and rollback was incomplete\"}");
+        send_response(client, 500, runtime_restored ?
+                "{\"error\":\"Services could not apply settings; previous settings were restored and reapplied\"}" :
+                "{\"error\":\"Services could not apply settings and runtime rollback was incomplete\"}");
         return;
     }
 
